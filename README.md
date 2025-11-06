@@ -44,40 +44,41 @@
    ```bash
    git clone https://github.com/mapachowsky/backend.git
    cd backend
-2. **Instala las dependencias
-    npm install
-3. **Configura las variables de entorno
+2. **Instala las dependencias**
+   ```bash
+   npm install
+4. **Configura las variables de entorno**
+   ```bash
    cp .env.example .env
-4. **Inicia el servidor
+6. **Inicia el servidor**
+   ```bash
    -npm run dev    # Desarrollo (con nodemon)
    -npm start      # Producción
-   ⚙️ Variables de entorno (.env)
-    -PORT=3000
-    -DB_HOST=localhost
-    -DB_USER=root
-    -DB_PASS=tu_contraseña
-    -DB_NAME=mi_basededatos
-    -DB_PORT=3306
-    -JWT_SECRET=tu_secreto_muy_seguro_123
-    -NODE_ENV=development
-   📡 Scripts disponibles
-    -npm run dev     # Inicia con nodemon (autoreload)
-    -npm start       # Inicia en producción
-    -npm test        # (Placeholder - puedes agregar Jest más adelante)
-   🗄️ Base de datos
+## ⚙️ Variables de entorno (.env)
+    - PORT=3000
+    - DB_HOST=localhost
+    - DB_USER=root
+    - DB_PASS=tu_contraseña
+    - DB_NAME=mi_basededatos
+    - DB_PORT=3306
+    - JWT_SECRET=tu_secreto_muy_seguro_123
+    - NODE_ENV=development
+## 📡 Scripts disponibles
+    - npm run dev     # Inicia con nodemon (autoreload)
+    - npm start       # Inicia en producción
+## 🗄️ Base de datos
    -MySQL
    -Modelos definidos con Sequelize
    -Archivo principal: src/app.js
 
-🔐 Autenticación
+##🔐 Autenticación
 
--Registro y login con hash de contraseñas
--Tokens JWT para sesiones
--Middleware de autenticación (si ya lo tienes implementado)
-📝 Licencia
+- Registro y login con hash de contraseñas
+- Tokens JWT para sesiones
 
+##📝 Licencia
 -Este proyecto está bajo la licencia ISC.
- 👨‍💻 Autor
--mapachowsky
--Guatemala City, Guatemala 🇬🇹
--@mapachowsky · Github-Mapachowski 
+ ##👨‍💻 Autor
+- mapachowsky
+- Guatemala City, Guatemala 🇬🇹
+- @mapachowsky · Github-Mapachowski 
