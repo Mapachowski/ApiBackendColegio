@@ -43,6 +43,45 @@ exports.getById = async (req, res) => {
   }
 };
 
+  exports.getMesesPagados = async (req, res) => {
+    try {
+      const { idAlumno, tipoPago, cicloEscolar } = req.params;
+
+      // Validaciones
+      if (!idAlumno || isNaN(idAlumno)) {
+        return res.status(400).json({ success: false, error: 'IdAlumno es requerido y debe ser un número' });
+      }
+      if (!tipoPago || isNaN(tipoPago)) {
+        return res.status(400).json({ success: false, error: 'IdTipoPago es requerido y debe ser un número' });
+      }
+      if (!cicloEscolar || !/^\d{4}$/.test(cicloEscolar)) {
+        return res.status(400).json({ success: false, error: 'CicloEscolar debe ser un año válido (ej: 2026)' });
+      }
+
+      // Ejecutar el Stored Procedure usando raw query de Sequelize
+      const [results] = await Pago.sequelize.query(
+        `CALL colegio.sp_MesesPagados(?, ?, ?)`,
+        {
+          replacements: [idAlumno, tipoPago, cicloEscolar],
+          type: Pago.sequelize.QueryTypes.SELECT
+        }
+      );
+
+      // Sequelize devuelve un array plano con los resultados del SP
+      res.json({
+        success: true,
+        data: results
+      });
+
+    } catch (error) {
+      console.error('Error al ejecutar sp_MesesPagados:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Error al obtener meses pagados',
+        details: error.message
+      });
+    }
+  };
 // Obtener pagos por NumeroRecibo
 exports.getByNumeroRecibo = async (req, res) => {
   try {
