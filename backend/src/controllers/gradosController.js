@@ -42,45 +42,53 @@ exports.create = async (req, res) => {
     res.status(400).json({ success: false, error: error.message });
   }
 };
-// NUEVO: Obtener costo mensual de un grado
-exports.getCostoGrado = async (req, res) => {
-  const { GradoId } = req.params;
 
-  // Validar que GradoId sea número
-  const id = parseInt(GradoId, 10);
-  if (isNaN(id) || id <= 0) {
-    return res.status(400).json({
-      success: false,
-      error: 'GradoId debe ser un número entero positivo'
-    });
-  }
+  exports.getCostoGrado = async (req, res) => {
+    const { GradoId } = req.params;
 
-  try {
-    console.log(`Ejecutando sp_CostoGrado(${id})...`);
-    const [results] = await sequelize.query(`CALL sp_CostoGrado(${id})`);
-    console.log('Resultado del SP:', results);
-
-    // Leer el valor de Mensualidad
-    const mensualidad = Array.isArray(results)
-      ? results[0]?.Mensualidad
-      : results?.Mensualidad;
-
-    if (!mensualidad) {
-      return res.status(404).json({
+    // Validar que GradoId sea número
+    const id = parseInt(GradoId, 10);
+    if (isNaN(id) || id <= 0) {
+      return res.status(400).json({
         success: false,
-        error: 'No se encontró el costo para este grado'
+        error: 'GradoId debe ser un número entero positivo'
       });
     }
 
-    res.json({ success: true, data: mensualidad });
-  } catch (error) {
-    console.error('Error en getCostoGrado:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Error al obtener el costo del grado'
-    });
-  }
-};
+    try {
+      console.log(`Ejecutando sp_CostoGrado(${id})...`);
+      const [results] = await sequelize.query(`CALL sp_CostoGrado(${id})`);
+      console.log('Resultado del SP:', results);
+
+      // Manejar el resultado del procedimiento almacenado
+      const fila = Array.isArray(results) ? results[0] : results;
+
+      const mensualidad = fila?.Mensualidad;
+      const valorInscripcion = fila?.ValorInscripcion;
+
+      if (!mensualidad || !valorInscripcion) {
+        return res.status(404).json({
+          success: false,
+          error: 'No se encontraron los costos para este grado'
+        });
+      }
+
+      res.json({
+        success: true,
+        data: {
+          ValorInscripcion: valorInscripcion,
+          Mensualidad: mensualidad
+        }
+      });
+    } catch (error) {
+      console.error('Error en getCostoGrado:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Error al obtener los costos del grado'
+      });
+    }
+  };
+
 // Actualizar un grado
 exports.update = async (req, res) => {
   try {
