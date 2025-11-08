@@ -31,7 +31,7 @@ const Alumno = sequelize.define('Alumnos', {
   IdFamilia: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: { model: 'Familias', key: 'IdFamilia' },
+    references: { model: 'familias', key: 'IdFamilia' },
   },
   Estado: {
     type: DataTypes.BOOLEAN,
@@ -67,7 +67,7 @@ const Alumno = sequelize.define('Alumnos', {
     allowNull: true, // Cambia a false si debe ser obligatorio
   },
 }, {
-  tableName: 'Alumnos',
+  tableName: 'alumnos',
   timestamps: false,
 });
 

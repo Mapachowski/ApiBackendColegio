@@ -23,10 +23,10 @@ const Bitacora = sequelize.define('Bitacora', {
   IdUsuario: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: { model: 'Usuarios', key: 'IdUsuario' },
+    references: { model: 'usuarios', key: 'IdUsuario' },
   },
 }, {
-  tableName: 'Bitacora',
+  tableName: 'bitacora',
   timestamps: false,
 });
 

@@ -14,7 +14,7 @@ const ResponsableTipo = sequelize.define('ResponsableTipo', {
     unique: true
   }
 }, {
-  tableName: 'ResponsableTipo',
+  tableName: 'responsabletipo',
   timestamps: false, // No tiene campos createdAt/updatedAt
   freezeTableName: true
 });

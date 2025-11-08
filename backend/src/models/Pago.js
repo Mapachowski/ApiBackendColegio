@@ -18,17 +18,17 @@ const Pago = sequelize.define('Pagos', {
   IdUsuario: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: { model: 'Usuarios', key: 'IdUsuario' },
+    references: { model: 'usuarios', key: 'IdUsuario' },
   },
   IdAlumno: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: { model: 'Alumnos', key: 'IdAlumno' },
+    references: { model: 'alumnos', key: 'IdAlumno' },
   },
   IdTipoPago: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: { model: 'TiposPago', key: 'IdTipoPago' },
+    references: { model: 'tiposPago', key: 'IdTipoPago' },
   },
   Concepto: {
     type: DataTypes.STRING(255),
@@ -37,7 +37,7 @@ const Pago = sequelize.define('Pagos', {
   IdMetodoPago: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: { model: 'MetodosPago', key: 'IdMetodoPago' },
+    references: { model: 'metodosPago', key: 'IdMetodoPago' },
   },
   Monto: {
     type: DataTypes.DECIMAL(10, 2),
@@ -77,7 +77,7 @@ const Pago = sequelize.define('Pagos', {
     allowNull: true, // Cambia a false si debe ser obligatorio
   },
 }, {
-  tableName: 'Pagos',
+  tableName: 'pagos',
   timestamps: false,
 });
 

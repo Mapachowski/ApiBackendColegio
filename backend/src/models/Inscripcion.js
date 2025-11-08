@@ -14,21 +14,21 @@ const Inscripcion = sequelize.define('Inscripciones', {
   IdAlumno: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: { model: 'Alumnos', key: 'IdAlumno' },
+    references: { model: 'alumnos', key: 'IdAlumno' },
   },
   IdSeccion: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: { model: 'Secciones', key: 'IdSeccion' },
+    references: { model: 'secciones', key: 'IdSeccion' },
   },
   IdJornada: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: { model: 'Jornadas', key: 'IdJornada' },
+    references: { model: 'jornadas', key: 'IdJornada' },
   },
   IdGrado: {
     type: DataTypes.INTEGER,
-    references: { model: 'Grados', key: 'IdGrado' },
+    references: { model: 'grados', key: 'IdGrado' },
   },
   CicloEscolar: {
     type: DataTypes.STRING(50),
@@ -49,7 +49,7 @@ const Inscripcion = sequelize.define('Inscripciones', {
   ModificadoPor: DataTypes.INTEGER,
   FechaModificado: DataTypes.DATE,
 }, {
-  tableName: 'Inscripciones',
+  tableName: 'inscripciones',
   timestamps: false,
 });
 

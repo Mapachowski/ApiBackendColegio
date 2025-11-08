@@ -17,7 +17,7 @@ const TipoPago = sequelize.define('TiposPago', {
     allowNull: false,
   },
 }, {
-  tableName: 'TiposPago',
+  tableName: 'tipospago',
   timestamps: false,
 });
 

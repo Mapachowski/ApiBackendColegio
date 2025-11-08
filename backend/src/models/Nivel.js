@@ -17,7 +17,7 @@ const Nivel = sequelize.define('Niveles', {
     allowNull: false,
   },
 }, {
-  tableName: 'Niveles',
+  tableName: 'niveles',
   timestamps: false,
 });
 

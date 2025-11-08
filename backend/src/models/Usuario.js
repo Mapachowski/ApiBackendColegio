@@ -23,7 +23,7 @@ const Usuario = sequelize.define('Usuarios', {
   IdRol: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: { model: 'Roles', key: 'IdRol' },
+    references: { model: 'roles', key: 'IdRol' },
   },
   Estado: {
     type: DataTypes.BOOLEAN,
@@ -35,7 +35,7 @@ const Usuario = sequelize.define('Usuarios', {
   ModificadoPor: DataTypes.INTEGER,
   FechaModificado: DataTypes.DATE,
 }, {
-  tableName: 'Usuarios',
+  tableName: 'usuarios',
   timestamps: false,
 });
 

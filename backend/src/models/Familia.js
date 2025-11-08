@@ -19,7 +19,7 @@ const Familia = sequelize.define('Familias', {
   DireccionRecibo: DataTypes.STRING(50),
   IdUsuario: {
     type: DataTypes.INTEGER,
-    references: { model: 'Usuarios', key: 'IdUsuario' },
+    references: { model: 'usuarios', key: 'IdUsuario' },
   },
   Estado: {
     type: DataTypes.BOOLEAN,
@@ -31,7 +31,7 @@ const Familia = sequelize.define('Familias', {
   ModificadoPor: DataTypes.INTEGER,
   FechaModificado: DataTypes.DATE,
 }, {
-  tableName: 'Familias',
+  tableName: 'familias',
   timestamps: false,
 });
 

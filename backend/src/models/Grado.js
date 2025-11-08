@@ -14,7 +14,7 @@ const Grado = sequelize.define('Grados', {
   },
   IdNivel: {
     type: DataTypes.INTEGER,
-    references: { model: 'Niveles', key: 'IdNivel' },
+    references: { model: 'niveles', key: 'IdNivel' },
   },
   Mensualidad: {
     type: DataTypes.DECIMAL(10, 2),
@@ -32,7 +32,7 @@ const Grado = sequelize.define('Grados', {
   ModificadoPor: DataTypes.INTEGER,
   FechaModificado: DataTypes.DATE,
 }, {
-  tableName: 'Grados',
+  tableName: 'grados',
   timestamps: false,  // Desactiva createdAt/updatedAt automáticos
 });
 

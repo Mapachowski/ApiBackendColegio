@@ -24,14 +24,14 @@ const Responsable = sequelize.define('Responsables', {
   IdFamilia: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: { model: 'Familias', key: 'IdFamilia' },
+    references: { model: 'familias', key: 'IdFamilia' },
   },
   IdResponsableTipo: {
     type: DataTypes.INTEGER,
     allowNull: false,
     references: {
-      model: 'ResponsableTipo',
-      key: 'IdResponsableTipo'
+      model: 'responsabletipo',
+      key: 'idResponsableTipo'
     },
     comment: 'Tipo de responsable: Padre, Madre, Tutor, etc.'
   },
@@ -49,7 +49,7 @@ const Responsable = sequelize.define('Responsables', {
   ModificadoPor: DataTypes.INTEGER,
   FechaModificado: DataTypes.DATE,
 }, {
-  tableName: 'Responsables',
+  tableName: 'responsables',
   timestamps: false,
 });
 

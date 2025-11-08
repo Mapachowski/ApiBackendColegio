@@ -17,7 +17,7 @@ const Jornada = sequelize.define('Jornadas', {
     allowNull: false,
   },
 }, {
-  tableName: 'Jornadas',
+  tableName: 'jornadas',
   timestamps: false,
 });
 

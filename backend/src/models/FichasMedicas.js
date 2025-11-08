@@ -11,7 +11,7 @@ const FichaMedica = sequelize.define('FichasMedicas', {
   IdAlumno: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: { model: 'Alumnos', key: 'IdAlumno' },
+    references: { model: 'alumnos', key: 'IdAlumno' },
   },
   Padecimiento: {
     type: DataTypes.STRING(55),
@@ -26,7 +26,7 @@ const FichaMedica = sequelize.define('FichasMedicas', {
     allowNull: true,
   },
 }, {
-  tableName: 'FichasMedicas',
+  tableName: 'fichasmedicas',
   timestamps: false,
 });
 
