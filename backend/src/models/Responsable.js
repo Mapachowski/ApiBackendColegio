@@ -31,7 +31,7 @@ const Responsable = sequelize.define('Responsables', {
     allowNull: false,
     references: {
       model: 'responsabletipo',
-      key: 'idResponsableTipo'
+      key: 'IdResponsableTipo'
     },
     comment: 'Tipo de responsable: Padre, Madre, Tutor, etc.'
   },
