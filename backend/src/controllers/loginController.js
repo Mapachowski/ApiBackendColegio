@@ -4,50 +4,58 @@ const jwt = require('jsonwebtoken');
 
 const login = async (req, res) => {
   try {
-    const { NombreUsuario, Contrasena } = req.body;
+    // 🔍 Verificar qué llega en el cuerpo
+    console.log('Cuerpo recibido en login:', req.body);
+
+    // Aceptar tanto los nombres antiguos como los del frontend
+    const { NombreUsuario, Contrasena, usuario, password } = req.body;
+
+    // Normalizar nombres
+    const user = NombreUsuario || usuario;
+    const pass = Contrasena || password;
 
     // Validar campos vacíos
-    if (!NombreUsuario || !Contrasena) {
+    if (!user || !pass) {
       return res.status(400).json({ message: 'Usuario y contraseña son requeridos' });
     }
 
-    // Buscar usuario
-    const usuario = await Usuario.findOne({
-      where: { NombreUsuario, Estado: true }
+    // Buscar usuario activo
+    const usuarioDB = await Usuario.findOne({
+      where: { NombreUsuario: user, Estado: true }
     });
 
-    if (!usuario) {
+    if (!usuarioDB) {
       return res.status(401).json({ message: 'Usuario no encontrado o inactivo' });
     }
 
     // Comparar contraseñas (encriptadas)
-    const esValida = await bcrypt.compare(Contrasena, usuario.Contrasena);
-
+    const esValida = await bcrypt.compare(pass, usuarioDB.Contrasena);
     if (!esValida) {
       return res.status(401).json({ message: 'Contraseña incorrecta' });
     }
 
     // Generar token JWT
     const token = jwt.sign(
-      { id: usuario.IdUsuario, rol: usuario.IdRol },
+      { id: usuarioDB.IdUsuario, rol: usuarioDB.IdRol },
       process.env.JWT_SECRET || 'clave_secreta_temporal',
       { expiresIn: '2h' }
     );
 
+    // Respuesta exitosa
     return res.json({
       message: 'Login exitoso',
       usuario: {
-        id: usuario.IdUsuario,
-        nombre: usuario.NombreCompleto,
-        rol: usuario.IdRol
+        id: usuarioDB.IdUsuario,
+        nombre: usuarioDB.NombreCompleto,
+        rol: usuarioDB.IdRol
       },
       token
     });
 
   } catch (error) {
-  console.error('Error en login:', error); // 👈 esto mostrará el error en la consola
-  return res.status(500).json({ message: error.message });
-}
+    console.error('Error en login:', error);
+    return res.status(500).json({ message: error.message });
+  }
 };
 
 module.exports = { login };

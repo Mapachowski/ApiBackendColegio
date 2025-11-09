@@ -1,4 +1,5 @@
 const Pago = require('../models/Pago');
+const sequelize = require('../config/database');
 const Alumno = require('../models/Alumno');
 const Usuario = require('../models/Usuario');
 const TipoPago = require('../models/TipoPago');
@@ -59,7 +60,7 @@ exports.getById = async (req, res) => {
       }
 
       // Ejecutar el Stored Procedure usando raw query de Sequelize
-      const [results] = await Pago.sequelize.query(
+      const [results] = await sequelize.query(
         `CALL colegio.sp_MesesPagados(?, ?, ?)`,
         {
           replacements: [idAlumno, tipoPago, cicloEscolar],
