@@ -1,14 +1,14 @@
 const express = require('express');
 const router = express.Router();
-const pagosController = require('../controllers/pagosController'); // Importa el controlador
+const pagosController = require('../controllers/pagosController'); // ✅ sube un nivel
 
-// Rutas para pagos
+// 🔹 Rutas para pagos
 router.get('/meses-pagados/:idAlumno/:tipoPago/:cicloEscolar', pagosController.getMesesPagados);
-router.get('/', pagosController.getAll);          // GET /api/pagos
-router.get('/:id', pagosController.getById);      // GET /api/pagos/:id
-router.get('/numero-recibo/:numero', pagosController.getByNumeroRecibo); // Buscar pagos por NumeroRecibo
-router.post('/', pagosController.create);         // POST /api/pagos
-router.put('/:id', pagosController.update);       // PUT /api/pagos/:id
-router.delete('/:id', pagosController.delete);    // DELETE /api/pagos/:id
+router.get('/', pagosController.getAll);
+router.get('/:id', pagosController.getById);
+router.get('/numero/:numeroRecibo', pagosController.getByNumeroRecibo);
+router.post('/', pagosController.create);
+router.put('/:id', pagosController.update);
+router.delete('/:id', pagosController.delete);
 
 module.exports = router;

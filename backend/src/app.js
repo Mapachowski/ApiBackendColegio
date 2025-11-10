@@ -10,23 +10,28 @@ const app = express();
 
 // ✅ Lista de orígenes permitidos
 const allowedOrigins = [
-  'http://localhost:3000',      // tu frontend local
+  'http://localhost:3000',                  // desarrollo local
+  'https://colegiocandelaria.edu.gt',       // dominio principal
+  'https://www.colegiocandelaria.edu.gt'    // con www
 ];
 
 // ✅ Configuración de CORS
 app.use(cors({
   origin: function (origin, callback) {
-    // Permite solicitudes sin origen (por ejemplo, herramientas tipo Insomnia)
+    // Permitir herramientas sin origen (Postman, curl, etc.)
     if (!origin) return callback(null, true);
+
     if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
+      callback(null, true);
     } else {
-      return callback(new Error('No permitido por CORS'));
+      console.log('🛑 CORS bloqueado para:', origin);
+      callback(new Error('No permitido por CORS'));
     }
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: true
+  credentials: true,
 }));
+
 
 // Middleware para parsear JSON
 app.use(express.json());
