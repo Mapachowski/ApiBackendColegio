@@ -65,6 +65,7 @@ exports.getSiguienteCarnet = async (req, res) => {
 // Validar si matrícula ya existe
 exports.existeMatricula = async (req, res) => {
   try {
+    console.log('Query matricula:', req.query); // ← LOG CLAVE
     const { matricula } = req.query;
 
     if (!matricula || matricula.trim() === '') {

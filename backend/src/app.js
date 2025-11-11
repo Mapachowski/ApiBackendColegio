@@ -35,6 +35,8 @@ app.use(cors({
 
 // Middleware para parsear JSON
 app.use(express.json());
+app.use(express.urlencoded({ extended: true })); // ← Permite query params complejos
+
 
 // Prueba de conexión a la base de datos
 async function testConnection() {

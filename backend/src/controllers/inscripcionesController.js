@@ -115,6 +115,7 @@ exports.getByAlumnoAndCiclo = async (req, res) => {
 
 exports.yaInscrito = async (req, res) => {
   try {
+    console.log('Query recibidos:', req.query);
     const { idAlumno, ciclo } = req.query;
 
     const id = parseInt(idAlumno, 10);
