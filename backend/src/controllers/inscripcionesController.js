@@ -112,6 +112,45 @@ exports.getByAlumnoAndCiclo = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
+exports.yaInscrito = async (req, res) => {
+  try {
+    const { idAlumno, ciclo } = req.query;
+
+    const id = parseInt(idAlumno, 10);
+    const cicloEscolar = parseInt(ciclo, 10);
+
+    if (isNaN(id)) {
+      return res.status(400).json({ success: false, error: 'IdAlumno debe ser número' });
+    }
+    if (isNaN(cicloEscolar) || cicloEscolar < 2000 || cicloEscolar > 2100) {
+      return res.status(400).json({ success: false, error: 'CicloEscolar debe ser un año válido' });
+    }
+
+    // Paso 1: Llamar SP con :param
+    await sequelize.query(
+      'CALL SP_AlumnoYaInscrito(:idAlumno, :ciclo, @yaInscrito, @idInscripcion)',
+      {
+        replacements: { idAlumno: id, ciclo: cicloEscolar },
+        type: sequelize.QueryTypes.RAW
+      }
+    );
+
+    // Paso 2: Leer variables OUT
+    const [[result]] = await sequelize.query(
+      'SELECT @yaInscrito AS yaInscrito, @idInscripcion AS idInscripcion'
+    );
+
+    res.json({
+      success: true,
+      yaInscrito: Boolean(result.yaInscrito),
+      idInscripcion: result.idInscripcion || null,
+    });
+  } catch (error) {
+    console.error('Error en yaInscrito:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
 // Crear una nueva inscripción
 exports.create = async (req, res) => {
   try {

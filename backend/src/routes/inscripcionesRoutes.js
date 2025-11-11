@@ -3,6 +3,8 @@ const express = require('express');
    const inscripcionController = require('../controllers/inscripcionesController');
 
    // Rutas para inscripciones
+
+   router.get('/ya-inscrito', inscripcionController.yaInscrito);
    router.get('/', inscripcionController.getAll); // Todas las inscripciones
    router.get('/filtros', inscripcionController.getByFilters); // Filtrar por Grado, Seccion, Jornada
    router.get('/buscar-alumno', inscripcionController.getByAlumnoAndCiclo); // Buscar por IdAlumno y CicloEscolar

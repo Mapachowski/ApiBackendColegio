@@ -62,6 +62,33 @@ exports.getSiguienteCarnet = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+// Validar si matrícula ya existe
+exports.existeMatricula = async (req, res) => {
+  try {
+    const { matricula } = req.query;
+
+    if (!matricula || matricula.trim() === '') {
+      return res.status(400).json({ success: false, error: 'Matrícula es requerida' });
+    }
+
+    // Paso 1: Llamar SP con replacements
+    await sequelize.query(
+      'CALL SP_ExisteMatricula(:matricula, @existe)',
+      {
+        replacements: { matricula },
+        type: sequelize.QueryTypes.RAW
+      }
+    );
+
+    // Paso 2: Leer la variable OUT
+    const [[result]] = await sequelize.query('SELECT @existe AS existe');
+
+    res.json({ success: true, existe: Boolean(result.existe) });
+  } catch (error) {
+    console.error('Error en existeMatricula:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
 // Actualizar un alumno
 exports.update = async (req, res) => {
   try {

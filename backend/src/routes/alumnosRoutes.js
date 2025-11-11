@@ -4,6 +4,7 @@ const alumnosController = require('../controllers/alumnosController'); // Import
 
 // Rutas para alumnos
 // RUTAS ESPECÍFICAS PRIMERO
+router.get('/existe-matricula', alumnosController.existeMatricula);
 router.get('/siguiente-carnet', alumnosController.getSiguienteCarnet);
 router.get('/', alumnosController.getAll);          // GET /api/alumnos
 router.get('/:id', alumnosController.getById);      // GET /api/alumnos/:id
