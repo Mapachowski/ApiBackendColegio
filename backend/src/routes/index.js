@@ -18,6 +18,8 @@ const tipoPagosRoutes = require('./tipoPagosRoutes');
 const loginRoutes = require('./loginRoutes');
 const fichaMedicaRoutes = require('./fichaMedicaRoutes');
 const responsableTipoRoutes = require('./responsableTipoRoutes');
+const docentesRoutes = require('./docentesRoutes');
+
 
 router.use('/alumnos', alumnosRoutes);
 router.use('/grados', gradosRoutes);
@@ -36,5 +38,6 @@ router.use('/tipopagos', tipoPagosRoutes);
 router.post('/login', loginRoutes);
 router.use('/fichasmedicas', fichaMedicaRoutes);
 router.use('/responsable-tipo', responsableTipoRoutes);
+router.use('/docentes', docentesRoutes);
 
 module.exports = router;
