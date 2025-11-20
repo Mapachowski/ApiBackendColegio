@@ -46,11 +46,27 @@ exports.getById = async (req, res) => {
   }
 };
 
-// Obtener inscripciones por filtros usando stored procedure
+// Obtener inscripciones por filtros usando stored procedure (con ciclo escolar)
 exports.getByFilters = async (req, res) => {
   try {
-    const { IdGrado, IdSeccion, IdJornada } = req.query;
+    const { p_CicloEscolar, IdGrado, IdSeccion, IdJornada } = req.query;
 
+    // Validación obligatoria del ciclo escolar
+    if (!p_CicloEscolar) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'El parámetro p_CicloEscolar es obligatorio' 
+      });
+    }
+
+    if (typeof p_CicloEscolar !== 'string' || p_CicloEscolar.length !== 4 || !/^\d{4}$/.test(p_CicloEscolar)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'p_CicloEscolar debe ser un año de 4 dígitos (ej. 2026)' 
+      });
+    }
+
+    // Parámetros opcionales numéricos (como antes)
     const gradoId = IdGrado ? parseInt(IdGrado, 10) : null;
     const seccionId = IdSeccion ? parseInt(IdSeccion, 10) : null;
     const jornadaId = IdJornada ? parseInt(IdJornada, 10) : null;
@@ -65,16 +81,29 @@ exports.getByFilters = async (req, res) => {
       return res.status(400).json({ success: false, error: 'IdJornada debe ser un número' });
     }
 
-    const query = `CALL sp_ListadoAlumnosPorInscripcion(${gradoId || 'NULL'}, ${seccionId || 'NULL'}, ${jornadaId || 'NULL'})`;
-    const results = await sequelize.query(query, { type: sequelize.QueryTypes.SELECT });
+    // Construcción segura del CALL (importante: usar comillas simples para el VARCHAR)
+    const query = `CALL colegio.sp_ListadoAlumnosPorInscripcion(
+      '${p_CicloEscolar}', 
+      ${gradoId !== null ? gradoId : 'NULL'}, 
+      ${seccionId !== null ? seccionId : 'NULL'}, 
+      ${jornadaId !== null ? jornadaId : 'NULL'}
+    )`;
+
+    const results = await sequelize.query(query, { 
+      type: sequelize.QueryTypes.SELECT 
+    });
 
     const inscripciones = results;
 
     if (!inscripciones || inscripciones.length === 0) {
-      return res.status(404).json({ success: false, error: 'No se encontraron inscripciones con los filtros proporcionados' });
+      return res.status(404).json({ 
+        success: false, 
+        error: 'No se encontraron inscripciones con los filtros proporcionados' 
+      });
     }
 
     res.json({ success: true, data: inscripciones });
+
   } catch (error) {
     console.error('Error en getByFilters:', error);
     res.status(500).json({ success: false, error: error.message });

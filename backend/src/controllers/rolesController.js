@@ -25,6 +25,18 @@ exports.getRolById = async (req, res) => {
   }
 };
 
+// Obtener todos los roles activos
+exports.getAll = async (req, res) => {
+  try {
+    const roles = await Rol.findAll({
+      where: { Estado: true },
+      attributes: ['IdRol', 'NombreRol'], // Solo necesitamos estos
+    });
+    res.json({ success: true, data: roles });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
 // Crear un nuevo rol
 exports.createRol = async (req, res) => {
   try {

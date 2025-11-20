@@ -1,25 +1,20 @@
+// loginController.js
 const Usuario = require('../models/Usuario');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 const login = async (req, res) => {
   try {
-    // 🔍 Verificar qué llega en el cuerpo
     console.log('Cuerpo recibido en login:', req.body);
 
-    // Aceptar tanto los nombres antiguos como los del frontend
     const { NombreUsuario, Contrasena, usuario, password } = req.body;
-
-    // Normalizar nombres
     const user = NombreUsuario || usuario;
     const pass = Contrasena || password;
 
-    // Validar campos vacíos
     if (!user || !pass) {
       return res.status(400).json({ message: 'Usuario y contraseña son requeridos' });
     }
 
-    // Buscar usuario activo
     const usuarioDB = await Usuario.findOne({
       where: { NombreUsuario: user, Estado: true }
     });
@@ -28,26 +23,25 @@ const login = async (req, res) => {
       return res.status(401).json({ message: 'Usuario no encontrado o inactivo' });
     }
 
-    // Comparar contraseñas (encriptadas)
     const esValida = await bcrypt.compare(pass, usuarioDB.Contrasena);
     if (!esValida) {
       return res.status(401).json({ message: 'Contraseña incorrecta' });
     }
 
-    // Generar token JWT
     const token = jwt.sign(
       { id: usuarioDB.IdUsuario, rol: usuarioDB.IdRol },
       process.env.JWT_SECRET || 'clave_secreta_temporal',
       { expiresIn: '2h' }
     );
 
-    // Respuesta exitosa
+    // DEVOLVEMOS NombreCompleto (clave)
     return res.json({
       message: 'Login exitoso',
       usuario: {
-        id: usuarioDB.IdUsuario,
-        nombre: usuarioDB.NombreCompleto,
-        rol: usuarioDB.IdRol
+        IdUsuario: usuarioDB.IdUsuario,
+        NombreUsuario: usuarioDB.NombreUsuario,
+        NombreCompleto: usuarioDB.NombreCompleto, // AQUÍ ESTÁ
+        IdRol: usuarioDB.IdRol
       },
       token
     });

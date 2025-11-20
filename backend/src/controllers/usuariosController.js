@@ -64,12 +64,13 @@ exports.create = async (req, res) => {
   }
 };
 
-// Actualizar un usuario (opcionalmente encripta si se manda una nueva contraseña)
+// Actualizar un usuario
 exports.update = async (req, res) => {
   try {
     const { id } = req.params;
-    const { IdColaborador, Contrasena } = req.body;
+    const { IdColaborador, Contrasena, ContrasenaActual } = req.body;
 
+    // Validar IdColaborador
     if (!IdColaborador || isNaN(IdColaborador)) {
       return res.status(400).json({
         success: false,
@@ -82,7 +83,32 @@ exports.update = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Usuario no encontrado' });
     }
 
-    // 🔒 Si se envía una nueva contraseña, la encriptamos
+    // Validar que solo se pueda modificar a sí mismo
+    if (parseInt(id) !== parseInt(IdColaborador)) {
+      return res.status(403).json({
+        success: false,
+        error: 'No puedes modificar a otro usuario',
+      });
+    }
+
+    // Si cambia contraseña → validar actual
+    if (Contrasena) {
+      if (!ContrasenaActual) {
+        return res.status(400).json({
+          success: false,
+          error: 'La contraseña actual es requerida',
+        });
+      }
+
+      const esValida = bcrypt.compareSync(ContrasenaActual, usuario.Contrasena);
+      if (!esValida) {
+        return res.status(400).json({
+          success: false,
+          error: 'Contraseña actual incorrecta',
+        });
+      }
+    }
+
     let datosActualizados = { ...req.body };
     if (Contrasena) {
       datosActualizados.Contrasena = bcrypt.hashSync(Contrasena, 10);
@@ -94,7 +120,7 @@ exports.update = async (req, res) => {
       FechaModificado: new Date(),
     });
 
-    res.json({ success: true, data: usuario });
+    res.json({ success: true, message: 'Usuario actualizado' });
   } catch (error) {
     res.status(400).json({ success: false, error: error.message });
   }
