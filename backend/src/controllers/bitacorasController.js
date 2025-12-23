@@ -31,7 +31,7 @@ exports.getBitacoraById = async (req, res) => {
 // Crear una nueva bitácora
 exports.createBitacora = async (req, res) => {
   try {
-    const { Accion, FechaBitacora, Ordenador, IdUsuario } = req.body;
+    const { Accion, FechaBitacora, Ordenador, IdUsuario, Observacion } = req.body;
 
     // Validar campos requeridos
     if (!Accion || !FechaBitacora || !Ordenador || !IdUsuario) {
@@ -49,6 +49,7 @@ exports.createBitacora = async (req, res) => {
       FechaBitacora,
       Ordenador,
       IdUsuario,
+      Observacion: Observacion || null, // Campo opcional
     });
 
     res.status(201).json(nuevaBitacora);

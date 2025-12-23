@@ -57,7 +57,13 @@ exports.create = async (req, res) => {
 
     try {
       console.log(`Ejecutando sp_CostoGrado(${id})...`);
-      const [results] = await sequelize.query(`CALL sp_CostoGrado(${id})`);
+      // ✅ SEGURO: Usar replacements para prevenir SQL injection
+      const [results] = await sequelize.query(
+        'CALL sp_CostoGrado(:gradoId)',
+        {
+          replacements: { gradoId: id }
+        }
+      );
       console.log('Resultado del SP:', results);
 
       // Manejar el resultado del procedimiento almacenado

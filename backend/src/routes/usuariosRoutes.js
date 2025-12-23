@@ -6,6 +6,7 @@ const usuariosController = require('../controllers/usuariosController'); // Impo
 router.get('/', usuariosController.getAll);          // GET /api/usuarios
 router.get('/:id', usuariosController.getById);      // GET /api/usuarios/:id
 router.post('/', usuariosController.create);         // POST /api/usuarios
+router.put('/soft-reset/:id', usuariosController.softReset); // PUT /api/usuarios/soft-reset/:id
 router.put('/:id', usuariosController.update);       // PUT /api/usuarios/:id
 router.delete('/:id', usuariosController.delete);    // DELETE /api/usuarios/:id
 

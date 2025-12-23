@@ -1,6 +1,7 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 const Familia = require('./Familia');
+const Usuario = require('./Usuario');
 
 const Alumno = sequelize.define('Alumnos', {
   IdAlumno: {
@@ -32,6 +33,11 @@ const Alumno = sequelize.define('Alumnos', {
     type: DataTypes.INTEGER,
     allowNull: false,
     references: { model: 'familias', key: 'IdFamilia' },
+  },
+  IdUsuario: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: { model: 'usuarios', key: 'IdUsuario' },
   },
   Estado: {
     type: DataTypes.BOOLEAN,
@@ -71,7 +77,8 @@ const Alumno = sequelize.define('Alumnos', {
   timestamps: false,
 });
 
-// Relación
+// Relaciones
 Alumno.belongsTo(Familia, { foreignKey: 'IdFamilia' });
+Alumno.belongsTo(Usuario, { foreignKey: 'IdUsuario' });
 
 module.exports = Alumno;

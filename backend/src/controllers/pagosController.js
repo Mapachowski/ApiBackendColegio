@@ -59,11 +59,15 @@ exports.getById = async (req, res) => {
         return res.status(400).json({ success: false, error: 'CicloEscolar debe ser un año válido (ej: 2026)' });
       }
 
-      // Ejecutar el Stored Procedure usando raw query de Sequelize
+      // ✅ SEGURO: Usar replacements con nombres para prevenir SQL injection
       const [results] = await sequelize.query(
-        `CALL colegio.sp_MesesPagados(?, ?, ?)`,
+        'CALL colegio.sp_MesesPagados(:idAlumno, :tipoPago, :cicloEscolar)',
         {
-          replacements: [idAlumno, tipoPago, cicloEscolar],
+          replacements: {
+            idAlumno: idAlumno,
+            tipoPago: tipoPago,
+            cicloEscolar: cicloEscolar
+          },
           type: Pago.sequelize.QueryTypes.SELECT
         }
       );
@@ -108,12 +112,257 @@ exports.getByNumeroRecibo = async (req, res) => {
   }
 };
 
+// Obtener reporte de pagos por fechas y ciclo escolar
+exports.getReportePagos = async (req, res) => {
+  try {
+    const { fechaInicial, fechaFinal, cicloEscolar } = req.query;
+
+    // Validaciones
+    if (!fechaInicial) {
+      return res.status(400).json({
+        success: false,
+        error: 'El parámetro fechaInicial es obligatorio'
+      });
+    }
+    if (!fechaFinal) {
+      return res.status(400).json({
+        success: false,
+        error: 'El parámetro fechaFinal es obligatorio'
+      });
+    }
+    if (!cicloEscolar) {
+      return res.status(400).json({
+        success: false,
+        error: 'El parámetro cicloEscolar es obligatorio'
+      });
+    }
+
+    // Validar formato de ciclo escolar
+    if (typeof cicloEscolar !== 'string' || cicloEscolar.length !== 4 || !/^\d{4}$/.test(cicloEscolar)) {
+      return res.status(400).json({
+        success: false,
+        error: 'cicloEscolar debe ser un año de 4 dígitos (ej. 2026)'
+      });
+    }
+
+    // Validar formato de fechas (YYYY-MM-DD)
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(fechaInicial)) {
+      return res.status(400).json({
+        success: false,
+        error: 'fechaInicial debe tener formato YYYY-MM-DD (ej. 2025-11-06)'
+      });
+    }
+    if (!dateRegex.test(fechaFinal)) {
+      return res.status(400).json({
+        success: false,
+        error: 'fechaFinal debe tener formato YYYY-MM-DD (ej. 2025-11-09)'
+      });
+    }
+
+    // Llamar al stored procedure con replacements para prevenir SQL injection
+    const results = await sequelize.query(
+      'CALL sp_ReportePagos(:fechaInicial, :fechaFinal, :cicloEscolar)',
+      {
+        replacements: {
+          fechaInicial: fechaInicial,
+          fechaFinal: fechaFinal,
+          cicloEscolar: cicloEscolar
+        },
+        type: sequelize.QueryTypes.SELECT
+      }
+    );
+
+    if (!results || results.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'No se encontraron pagos con los filtros proporcionados'
+      });
+    }
+
+    res.json({ success: true, data: results });
+  } catch (error) {
+    console.error('Error en getReportePagos:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// Obtener pagos de hoy por ciclo escolar
+exports.getPagosHoy = async (req, res) => {
+  try {
+    const { cicloEscolar } = req.query;
+
+    // Validación obligatoria del ciclo escolar
+    if (!cicloEscolar) {
+      return res.status(400).json({
+        success: false,
+        error: 'El parámetro cicloEscolar es obligatorio'
+      });
+    }
+
+    // Validar formato de ciclo escolar
+    if (typeof cicloEscolar !== 'string' || cicloEscolar.length !== 4 || !/^\d{4}$/.test(cicloEscolar)) {
+      return res.status(400).json({
+        success: false,
+        error: 'cicloEscolar debe ser un año de 4 dígitos (ej. 2026)'
+      });
+    }
+
+    // Llamar al stored procedure con replacements para prevenir SQL injection
+    const results = await sequelize.query(
+      'CALL sp_PagosHoy(:cicloEscolar)',
+      {
+        replacements: {
+          cicloEscolar: cicloEscolar
+        },
+        type: sequelize.QueryTypes.SELECT
+      }
+    );
+
+    if (!results || results.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'No se encontraron pagos para hoy'
+      });
+    }
+
+    res.json({ success: true, data: results });
+  } catch (error) {
+    console.error('Error en getPagosHoy:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// Obtener alumnos insolventes por ciclo escolar y mes
+exports.getInsolventes = async (req, res) => {
+  try {
+    const { cicloEscolar, mes } = req.query;
+
+    // Validación obligatoria del ciclo escolar
+    if (!cicloEscolar) {
+      return res.status(400).json({
+        success: false,
+        error: 'El parámetro cicloEscolar es obligatorio'
+      });
+    }
+
+    // Validar formato de ciclo escolar
+    if (typeof cicloEscolar !== 'string' || cicloEscolar.length !== 4 || !/^\d{4}$/.test(cicloEscolar)) {
+      return res.status(400).json({
+        success: false,
+        error: 'cicloEscolar debe ser un año de 4 dígitos (ej. 2026)'
+      });
+    }
+
+    // Validación obligatoria del mes
+    if (!mes) {
+      return res.status(400).json({
+        success: false,
+        error: 'El parámetro mes es obligatorio'
+      });
+    }
+
+    // Validar que el mes sea un número entre 1 y 10
+    const mesNumero = parseInt(mes, 10);
+    if (isNaN(mesNumero) || mesNumero < 1 || mesNumero > 10) {
+      return res.status(400).json({
+        success: false,
+        error: 'El mes debe ser un número entre 1 y 10'
+      });
+    }
+
+    // Llamar al stored procedure con replacements para prevenir SQL injection
+    const results = await sequelize.query(
+      'CALL sp_obtenerAlumnosInsolventesPrueba(:cicloEscolar, :mes)',
+      {
+        replacements: {
+          cicloEscolar: cicloEscolar,
+          mes: mesNumero
+        },
+        type: sequelize.QueryTypes.SELECT
+      }
+    );
+
+    if (!results || results.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'No se encontraron alumnos insolventes con los filtros proporcionados'
+      });
+    }
+
+    res.json({ success: true, data: results });
+  } catch (error) {
+    console.error('Error en getInsolventes:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// Buscar pagos por nombre de recibo, número de recibo y ciclo escolar
+exports.buscarPagos = async (req, res) => {
+  try {
+    const { nombreRecibo, numeroRecibo, cicloEscolar } = req.query;
+
+    // Validación: al menos uno de los filtros opcionales debe estar presente
+    if (!nombreRecibo && !numeroRecibo) {
+      return res.status(400).json({
+        success: false,
+        error: 'Debe proporcionar al menos nombreRecibo o numeroRecibo'
+      });
+    }
+
+    // Validación obligatoria del ciclo escolar
+    if (!cicloEscolar) {
+      return res.status(400).json({
+        success: false,
+        error: 'El parámetro cicloEscolar es obligatorio'
+      });
+    }
+
+    // Validar formato de ciclo escolar
+    if (typeof cicloEscolar !== 'string' || cicloEscolar.length !== 4 || !/^\d{4}$/.test(cicloEscolar)) {
+      return res.status(400).json({
+        success: false,
+        error: 'cicloEscolar debe ser un año de 4 dígitos (ej. 2026)'
+      });
+    }
+
+    // Preparar parámetros (null si no se proporciona)
+    const nombreReciboParam = nombreRecibo || null;
+    const numeroReciboParam = numeroRecibo || null;
+
+    // Llamar al stored procedure con replacements para prevenir SQL injection
+    const results = await sequelize.query(
+      'CALL sp_BuscarPagos(:nombreRecibo, :numeroRecibo, :cicloEscolar)',
+      {
+        replacements: {
+          nombreRecibo: nombreReciboParam,
+          numeroRecibo: numeroReciboParam,
+          cicloEscolar: cicloEscolar
+        },
+        type: sequelize.QueryTypes.SELECT
+      }
+    );
+
+    if (!results || results.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'No se encontraron pagos con los filtros proporcionados'
+      });
+    }
+
+    res.json({ success: true, data: results });
+  } catch (error) {
+    console.error('Error en buscarPagos:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 // Crear un nuevo pago
 exports.create = async (req, res) => {
   try {
     const {
       IdColaborador, Fecha, IdUsuario, IdAlumno, IdTipoPago, Concepto,
-      IdMetodoPago, Monto, NumeroRecibo, NombreRecibo, DireccionRecibo
+      IdMetodoPago, Monto, Anio, NumeroRecibo, NombreRecibo, DireccionRecibo
     } = req.body;
 
     // Validaciones existentes
@@ -127,6 +376,11 @@ exports.create = async (req, res) => {
     if (!Concepto) return res.status(400).json({ success: false, error: 'Concepto es requerido' });
     if (!IdMetodoPago || isNaN(IdMetodoPago)) return res.status(400).json({ success: false, error: 'IdMetodoPago es requerido y debe ser un número' });
     if (!Monto || isNaN(Monto)) return res.status(400).json({ success: false, error: 'Monto es requerido y debe ser un número' });
+
+    // Validación de Anio
+    if (!Anio || isNaN(Anio)) {
+      return res.status(400).json({ success: false, error: 'Anio es requerido y debe ser un número' });
+    }
 
     // NUEVAS VALIDACIONES
     if (!NombreRecibo || typeof NombreRecibo !== 'string' || NombreRecibo.trim() === '') {
@@ -144,6 +398,7 @@ exports.create = async (req, res) => {
       Concepto,
       IdMetodoPago,
       Monto,
+      Anio,
       NumeroRecibo,
       NombreRecibo: NombreRecibo.trim(),
       DireccionRecibo: DireccionRecibo.trim(),
@@ -165,7 +420,7 @@ exports.update = async (req, res) => {
     const { id } = req.params;
     const {
       IdColaborador, Fecha, IdUsuario, IdAlumno, IdTipoPago, Concepto,
-      IdMetodoPago, Monto, NumeroRecibo, NombreRecibo, DireccionRecibo, Estado
+      IdMetodoPago, Monto, Anio, NumeroRecibo, NombreRecibo, DireccionRecibo, Estado
     } = req.body;
 
     if (!IdColaborador || isNaN(IdColaborador)) {
@@ -185,6 +440,7 @@ exports.update = async (req, res) => {
       Concepto: Concepto || pago.Concepto,
       IdMetodoPago: IdMetodoPago || pago.IdMetodoPago,
       Monto: Monto !== undefined ? Monto : pago.Monto,
+      Anio: Anio !== undefined ? Anio : pago.Anio,
       NumeroRecibo: NumeroRecibo !== undefined ? NumeroRecibo : pago.NumeroRecibo,
       // NUEVOS CAMPOS
       NombreRecibo: NombreRecibo !== undefined ? NombreRecibo.trim() : pago.NombreRecibo,

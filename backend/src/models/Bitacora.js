@@ -9,7 +9,7 @@ const Bitacora = sequelize.define('Bitacora', {
     autoIncrement: true,
   },
   Accion: {
-    type: DataTypes.STRING(50),
+    type: DataTypes.STRING(255),
     allowNull: false,
   },
   FechaBitacora: {
@@ -24,6 +24,10 @@ const Bitacora = sequelize.define('Bitacora', {
     type: DataTypes.INTEGER,
     allowNull: false,
     references: { model: 'usuarios', key: 'IdUsuario' },
+  },
+  Observacion: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
   },
 }, {
   tableName: 'bitacora',

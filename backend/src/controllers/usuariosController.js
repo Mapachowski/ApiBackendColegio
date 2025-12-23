@@ -126,6 +126,41 @@ exports.update = async (req, res) => {
   }
 };
 
+// Resetear contraseña (sin validar contraseña actual)
+exports.softReset = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { Contrasena } = req.body;
+
+    // Validar que se proporcione la nueva contraseña
+    if (!Contrasena || typeof Contrasena !== 'string' || Contrasena.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        error: 'Contrasena es requerida y debe ser un texto válido',
+      });
+    }
+
+    const usuario = await Usuario.findByPk(id);
+    if (!usuario) {
+      return res.status(404).json({ success: false, error: 'Usuario no encontrado' });
+    }
+
+    // Encriptar la nueva contraseña
+    const contrasenaEncriptada = bcrypt.hashSync(Contrasena, 10);
+
+    // Actualizar solo la contraseña
+    await usuario.update({
+      Contrasena: contrasenaEncriptada,
+      FechaModificado: new Date(),
+    });
+
+    res.json({ success: true, message: 'Contraseña restablecida exitosamente' });
+  } catch (error) {
+    console.error('Error en softReset:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 // "Eliminar" un usuario (cambiar Estado a 0)
 exports.delete = async (req, res) => {
   try {

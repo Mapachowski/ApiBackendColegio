@@ -43,6 +43,10 @@ const Pago = sequelize.define('Pagos', {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: true,
   },
+  Anio: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
   Estado: {
     type: DataTypes.BOOLEAN,
     defaultValue: true,

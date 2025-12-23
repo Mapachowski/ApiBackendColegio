@@ -81,17 +81,19 @@ exports.getByFilters = async (req, res) => {
       return res.status(400).json({ success: false, error: 'IdJornada debe ser un número' });
     }
 
-    // Construcción segura del CALL (importante: usar comillas simples para el VARCHAR)
-    const query = `CALL colegio.sp_ListadoAlumnosPorInscripcion(
-      '${p_CicloEscolar}', 
-      ${gradoId !== null ? gradoId : 'NULL'}, 
-      ${seccionId !== null ? seccionId : 'NULL'}, 
-      ${jornadaId !== null ? jornadaId : 'NULL'}
-    )`;
-
-    const results = await sequelize.query(query, { 
-      type: sequelize.QueryTypes.SELECT 
-    });
+    // ✅ SEGURO: Usar replacements para prevenir SQL injection
+    const results = await sequelize.query(
+      'CALL colegio.sp_ListadoAlumnosPorInscripcion(:ciclo, :grado, :seccion, :jornada)',
+      {
+        replacements: {
+          ciclo: p_CicloEscolar,
+          grado: gradoId,
+          seccion: seccionId,
+          jornada: jornadaId
+        },
+        type: sequelize.QueryTypes.SELECT
+      }
+    );
 
     const inscripciones = results;
 
@@ -124,10 +126,17 @@ exports.getByAlumnoAndCiclo = async (req, res) => {
       return res.status(400).json({ success: false, error: 'CicloEscolar es requerido y debe ser un año en formato YYYY' });
     }
 
-    // Escapar CicloEscolar para evitar inyección SQL
-    const escapedCicloEscolar = sequelize.escape(CicloEscolar);
-    const query = `CALL sp_BuscarAlumnoPorIdEnInscripcion(${alumnoId}, ${escapedCicloEscolar})`;
-    const results = await sequelize.query(query, { type: sequelize.QueryTypes.SELECT });
+    // ✅ SEGURO: Usar replacements para prevenir SQL injection
+    const results = await sequelize.query(
+      'CALL sp_BuscarAlumnoPorIdEnInscripcion(:alumnoId, :ciclo)',
+      {
+        replacements: {
+          alumnoId: alumnoId,
+          ciclo: CicloEscolar
+        },
+        type: sequelize.QueryTypes.SELECT
+      }
+    );
 
     const inscripciones = results;
 

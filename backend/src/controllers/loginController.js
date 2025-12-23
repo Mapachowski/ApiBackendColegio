@@ -28,9 +28,15 @@ const login = async (req, res) => {
       return res.status(401).json({ message: 'Contraseña incorrecta' });
     }
 
+    // Verificar que JWT_SECRET esté configurado
+    if (!process.env.JWT_SECRET) {
+      console.error('FATAL: JWT_SECRET no está configurado en .env');
+      return res.status(500).json({ message: 'Error de configuración del servidor' });
+    }
+
     const token = jwt.sign(
       { id: usuarioDB.IdUsuario, rol: usuarioDB.IdRol },
-      process.env.JWT_SECRET || 'clave_secreta_temporal',
+      process.env.JWT_SECRET,
       { expiresIn: '2h' }
     );
 

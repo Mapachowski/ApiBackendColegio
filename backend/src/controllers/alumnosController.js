@@ -1,5 +1,6 @@
 const sequelize = require('../config/database'); // ← Ahora sí funciona
 const Alumno = require('../models/Alumno'); // Importa el modelo de Alumno
+const Usuario = require('../models/Usuario');
 
 // Obtener todos los alumnos con estado activo
 exports.getAll = async (req, res) => {
@@ -15,7 +16,15 @@ exports.getAll = async (req, res) => {
 exports.getById = async (req, res) => {
   try {
     const { id } = req.params;
-    const alumno = await Alumno.findByPk(id); // findByPk busca por clave primaria
+    const alumno = await Alumno.findByPk(id, {
+      include: [
+        {
+          model: Usuario,
+          attributes: ['IdUsuario', 'NombreUsuario', 'NombreCompleto', 'IdRol'],
+          required: false // LEFT JOIN - devuelve el alumno aunque no tenga usuario
+        }
+      ]
+    });
     if (!alumno) {
       return res.status(404).json({ success: false, error: 'Alumno no encontrado' });
     }
@@ -110,6 +119,73 @@ exports.update = async (req, res) => {
     res.json({ success: true, data: alumno });
   } catch (error) {
     res.status(400).json({ success: false, error: error.message });
+  }
+};
+
+// Obtener alumnos retirados/expulsados
+exports.getAlumnosExpulsados = async (req, res) => {
+  try {
+    const [results] = await sequelize.query('CALL sp_BuscarAlumnosRetirados()');
+
+    if (!results || results.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'No se encontraron alumnos retirados'
+      });
+    }
+
+    res.json({ success: true, data: results });
+  } catch (error) {
+    console.error('Error en getAlumnosExpulsados:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// Regresar estudiante al sistema
+exports.regresarEstudiante = async (req, res) => {
+  try {
+    const { IdAlumno, IdInscripcion, IdColaborador } = req.body;
+
+    // Validaciones
+    if (!IdAlumno || isNaN(IdAlumno)) {
+      return res.status(400).json({
+        success: false,
+        error: 'IdAlumno es requerido y debe ser un número'
+      });
+    }
+    if (!IdInscripcion || isNaN(IdInscripcion)) {
+      return res.status(400).json({
+        success: false,
+        error: 'IdInscripcion es requerido y debe ser un número'
+      });
+    }
+    if (!IdColaborador || isNaN(IdColaborador)) {
+      return res.status(400).json({
+        success: false,
+        error: 'IdColaborador es requerido y debe ser un número'
+      });
+    }
+
+    // Llamar al stored procedure con replacements para prevenir SQL injection
+    await sequelize.query(
+      'CALL sp_RegresarEstudianteAlSistema(:idAlumno, :idInscripcion, :idColaborador)',
+      {
+        replacements: {
+          idAlumno: IdAlumno,
+          idInscripcion: IdInscripcion,
+          idColaborador: IdColaborador
+        },
+        type: sequelize.QueryTypes.RAW
+      }
+    );
+
+    res.json({
+      success: true,
+      message: 'Estudiante regresado al sistema exitosamente'
+    });
+  } catch (error) {
+    console.error('Error en regresarEstudiante:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 };
 

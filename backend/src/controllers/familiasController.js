@@ -1,4 +1,5 @@
 const Familia = require('../models/Familia'); // Importa el modelo de Familia
+const sequelize = require('../config/database');
 
 // Obtener todas las familias
 exports.getAll = async (req, res) => {
@@ -20,6 +21,27 @@ exports.getById = async (req, res) => {
     }
     res.json({ success: true, data: familia });
   } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// Obtener familias completas con toda la información
+exports.getFamiliasCompletas = async (req, res) => {
+  try {
+    const results = await sequelize.query('CALL sp_obtenerfamiliascompletas()', {
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    if (!results || results.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'No se encontraron familias completas'
+      });
+    }
+
+    res.json({ success: true, data: results });
+  } catch (error) {
+    console.error('Error en getFamiliasCompletas:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
