@@ -93,18 +93,96 @@ exports.getPromedioAlumno = async (req, res) => {
   }
 };
 
+// Crear/actualizar calificaciones en batch para una actividad
+exports.updateBatchActividad = async (req, res) => {
+  try {
+    const { idActividad } = req.params;
+    const { calificaciones } = req.body;
+
+    // Obtener usuario del JWT
+    const ModificadoPor = req.usuario?.email || req.usuario?.nombre || 'Sistema';
+
+    if (!calificaciones || !Array.isArray(calificaciones) || calificaciones.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Se requiere un array de calificaciones',
+      });
+    }
+
+    // Verificar que la actividad existe
+    const actividad = await Actividad.findByPk(idActividad);
+    if (!actividad) {
+      return res.status(404).json({
+        success: false,
+        error: 'Actividad no encontrada'
+      });
+    }
+
+    let creadas = 0;
+    let actualizadas = 0;
+    const errores = [];
+
+    for (const item of calificaciones) {
+      try {
+        const { IdAlumno, Punteo, Observaciones } = item;
+
+        // Buscar si ya existe la calificación
+        const [calificacionExistente] = await Calificacion.findOrCreate({
+          where: {
+            IdActividad: idActividad,
+            IdAlumno: IdAlumno
+          },
+          defaults: {
+            Punteo,
+            Observaciones,
+            CreadoPor: ModificadoPor,
+            FechaCreado: new Date()
+          }
+        });
+
+        if (calificacionExistente._options.isNewRecord) {
+          // Se creó una nueva calificación
+          creadas++;
+        } else {
+          // Actualizar calificación existente
+          await calificacionExistente.update({
+            Punteo,
+            Observaciones,
+            ModificadoPor,
+            FechaModificado: new Date()
+          });
+          actualizadas++;
+        }
+      } catch (error) {
+        errores.push({
+          IdAlumno: item.IdAlumno,
+          error: error.message
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      creadas,
+      actualizadas,
+      total: creadas + actualizadas,
+      errores: errores.length > 0 ? errores : undefined,
+      message: `${creadas + actualizadas} calificaciones procesadas exitosamente`
+    });
+  } catch (error) {
+    console.error('❌ Error en batch de calificaciones:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 // Actualizar una calificación (ingresar punteo)
 exports.update = async (req, res) => {
   try {
     const { id } = req.params;
-    const { Punteo, Observaciones, ModificadoPor } = req.body;
+    const { Punteo, Observaciones } = req.body;
 
-    if (!ModificadoPor || ModificadoPor.trim() === '') {
-      return res.status(400).json({
-        success: false,
-        error: 'ModificadoPor es requerido',
-      });
-    }
+    // Obtener usuario del JWT
+    const ModificadoPor = req.usuario?.email || req.usuario?.nombre || 'Sistema';
 
     const calificacion = await Calificacion.findByPk(id, {
       include: [{ model: Actividad }],

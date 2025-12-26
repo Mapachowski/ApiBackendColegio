@@ -21,6 +21,45 @@ exports.getById = async (req, res) => {
   }
 };
 
+// Obtener alumnos inscritos en la asignación de una actividad
+exports.getAlumnosActividad = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [alumnos] = await sequelize.query(
+      `SELECT DISTINCT
+          a.IdAlumno,
+          a.Matricula AS Carnet,
+          CONCAT(a.Nombres, ' ', a.Apellidos) AS NombreCompleto,
+          a.Nombres,
+          a.Apellidos,
+          c.IdCalificacion,
+          c.Punteo,
+          c.Observaciones
+       FROM actividades act
+       INNER JOIN unidades u ON act.IdUnidad = u.IdUnidad
+       INNER JOIN asignacion_docente ad ON u.IdAsignacionDocente = ad.IdAsignacionDocente
+       INNER JOIN inscripciones i ON
+           i.IdGrado = ad.IdGrado
+           AND i.IdSeccion = ad.IdSeccion
+           AND i.IdJornada = ad.IdJornada
+           AND i.CicloEscolar = ad.Anio
+       INNER JOIN alumnos a ON i.IdAlumno = a.IdAlumno
+       LEFT JOIN calificaciones c ON c.IdActividad = act.IdActividad AND c.IdAlumno = a.IdAlumno
+       WHERE act.IdActividad = ?
+         AND i.Estado = 1
+         AND a.Estado = 1
+       ORDER BY a.Apellidos, a.Nombres`,
+      { replacements: [id] }
+    );
+
+    res.json({ success: true, data: alumnos, total: alumnos.length });
+  } catch (error) {
+    console.error('❌ Error al obtener alumnos de actividad:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 // Obtener calificaciones de una actividad
 exports.getCalificaciones = async (req, res) => {
   try {

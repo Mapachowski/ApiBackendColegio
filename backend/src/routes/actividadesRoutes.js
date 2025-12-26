@@ -16,6 +16,9 @@ router.post('/unidad/:idUnidad/batch', validarPropiedadActividad, actividadesCon
 // Validar suma de actividades (antes de crear)
 router.post('/unidad/:idUnidad/validar-suma', actividadesController.validarSuma);
 
+// Obtener alumnos de una actividad (con calificaciones si existen)
+router.get('/:id/alumnos', actividadesController.getAlumnosActividad);
+
 // Verificar si actividad tiene calificaciones
 router.get('/:id/tiene-calificaciones', actividadesController.tieneCalificaciones);
 
