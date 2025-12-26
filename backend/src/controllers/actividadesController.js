@@ -97,14 +97,10 @@ exports.create = async (req, res) => {
 exports.update = async (req, res) => {
   try {
     const { id } = req.params;
-    const { ModificadoPor, PunteoMaximo, FechaActividad } = req.body;
+    const { PunteoMaximo, FechaActividad } = req.body;
 
-    if (!ModificadoPor || ModificadoPor.trim() === '') {
-      return res.status(400).json({
-        success: false,
-        error: 'ModificadoPor es requerido',
-      });
-    }
+    // Obtener usuario del token JWT (agregado por middleware de autenticación)
+    const ModificadoPor = req.usuario?.email || req.usuario?.nombre || 'Sistema';
 
     const actividad = await Actividad.findByPk(id);
     if (!actividad) {
@@ -161,11 +157,13 @@ exports.update = async (req, res) => {
     // ============================================
     await actividad.update({
       ...req.body,
+      ModificadoPor,
       FechaModificado: new Date(),
     });
 
     res.json({ success: true, data: actividad });
   } catch (error) {
+    console.error('❌ Error al actualizar actividad:', error);
     res.status(400).json({ success: false, error: error.message });
   }
 };
