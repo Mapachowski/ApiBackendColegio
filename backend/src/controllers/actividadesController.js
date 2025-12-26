@@ -215,19 +215,22 @@ exports.getByUnidad = async (req, res) => {
   try {
     const { idUnidad } = req.params;
 
+    // Obtener TODAS las actividades (activas e inactivas)
     const actividades = await Actividad.findAll({
-      where: { IdUnidad: idUnidad, Estado: true },
+      where: { IdUnidad: idUnidad },
       order: [['TipoActividad', 'ASC'], ['FechaActividad', 'ASC']],
     });
 
-    // Calcular totales por tipo
+    // Calcular totales SOLO con actividades activas (Estado = true)
     const totales = {
       zona: 0,
       final: 0,
       total: 0,
     };
 
-    actividades.forEach((act) => {
+    const actividadesActivas = actividades.filter(act => act.Estado === true);
+
+    actividadesActivas.forEach((act) => {
       const punteo = parseFloat(act.PunteoMaximo);
       totales[act.TipoActividad] += punteo;
       totales.total += punteo;
@@ -235,9 +238,11 @@ exports.getByUnidad = async (req, res) => {
 
     res.json({
       success: true,
-      data: actividades,
-      totales,
+      data: actividades, // Devolver todas (activas e inactivas)
+      totales, // Totales solo de activas
       cantidad: actividades.length,
+      cantidadActivas: actividadesActivas.length,
+      cantidadInactivas: actividades.length - actividadesActivas.length,
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
