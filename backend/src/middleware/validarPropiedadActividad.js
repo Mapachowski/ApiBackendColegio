@@ -87,7 +87,6 @@ const validarPropiedadActividad = async (req, res, next) => {
            INNER JOIN unidades u ON a.IdUnidad = u.IdUnidad
            INNER JOIN asignacion_docente ad ON u.IdAsignacionDocente = ad.IdAsignacionDocente
            WHERE a.IdActividad = :idActividad
-             AND a.Estado = 1
              AND u.Estado = 1
              AND ad.Estado = 1
              AND ad.IdDocente = :idDocente`,
