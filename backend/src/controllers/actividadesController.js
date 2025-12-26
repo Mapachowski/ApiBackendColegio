@@ -97,7 +97,7 @@ exports.create = async (req, res) => {
 exports.update = async (req, res) => {
   try {
     const { id } = req.params;
-    const { PunteoMaximo, FechaActividad } = req.body;
+    const { PunteoMaximo, FechaActividad, Estado, TipoActividad } = req.body;
 
     // Obtener usuario del token JWT (agregado por middleware de autenticación)
     const ModificadoPor = req.usuario?.email || req.usuario?.nombre || 'Sistema';
@@ -108,7 +108,53 @@ exports.update = async (req, res) => {
     }
 
     // ============================================
-    // VALIDACIÓN 1: Bloquear modificación si la fecha límite ya pasó
+    // VALIDACIÓN CRÍTICA: Verificar si tiene calificaciones asignadas
+    // ============================================
+    const cantidadCalificaciones = await Calificacion.count({
+      where: { IdActividad: id }
+    });
+
+    if (cantidadCalificaciones > 0) {
+      // ❌ NO permitir inactivar actividad con calificaciones
+      if (Estado !== undefined && (Estado === false || Estado === 0 || Estado === '0')) {
+        return res.status(400).json({
+          success: false,
+          error: 'No se puede inactivar una actividad con calificaciones asignadas',
+          tieneCalificaciones: true,
+          cantidadCalificaciones: cantidadCalificaciones,
+          mensaje: 'Esta actividad tiene calificaciones de estudiantes. Inactivarla afectaría sus notas.'
+        });
+      }
+
+      // ❌ NO permitir cambiar punteo máximo si tiene calificaciones
+      if (PunteoMaximo !== undefined && parseFloat(PunteoMaximo) !== parseFloat(actividad.PunteoMaximo)) {
+        return res.status(400).json({
+          success: false,
+          error: 'No se puede cambiar el punteo de una actividad con calificaciones asignadas',
+          tieneCalificaciones: true,
+          cantidadCalificaciones: cantidadCalificaciones,
+          punteoActual: actividad.PunteoMaximo,
+          punteoSolicitado: PunteoMaximo,
+          mensaje: 'Esta actividad tiene calificaciones de estudiantes. Cambiar el punteo crearía inconsistencias.'
+        });
+      }
+
+      // ❌ NO permitir cambiar tipo de actividad (zona ↔ final)
+      if (TipoActividad !== undefined && TipoActividad !== actividad.TipoActividad) {
+        return res.status(400).json({
+          success: false,
+          error: 'No se puede cambiar el tipo de una actividad con calificaciones asignadas',
+          tieneCalificaciones: true,
+          cantidadCalificaciones: cantidadCalificaciones,
+          tipoActual: actividad.TipoActividad,
+          tipoSolicitado: TipoActividad,
+          mensaje: 'Esta actividad tiene calificaciones de estudiantes. Cambiar de zona a final (o viceversa) afectaría sus notas.'
+        });
+      }
+    }
+
+    // ============================================
+    // VALIDACIÓN DE FECHA LÍMITE
     // ============================================
     const fechaActual = new Date();
     const fechaLimiteActividad = new Date(actividad.FechaActividad);
@@ -122,34 +168,6 @@ exports.update = async (req, res) => {
           fechaActual: fechaActual.toISOString().split('T')[0],
         },
       });
-    }
-
-    // ============================================
-    // VALIDACIÓN 2: Bloquear cambio de PunteoMaximo si hay estudiantes calificados
-    // ============================================
-    if (PunteoMaximo !== undefined && parseFloat(PunteoMaximo) !== parseFloat(actividad.PunteoMaximo)) {
-      // Verificar si existen calificaciones con punteo asignado (Punteo IS NOT NULL)
-      const [resultados] = await sequelize.query(
-        `SELECT COUNT(*) as calificados
-         FROM calificaciones
-         WHERE IdActividad = ? AND Punteo IS NOT NULL`,
-        { replacements: [id] }
-      );
-
-      const cantidadCalificados = resultados[0].calificados;
-
-      if (cantidadCalificados > 0) {
-        return res.status(403).json({
-          success: false,
-          error: 'No se puede modificar el punteo máximo porque ya hay estudiantes calificados',
-          detalles: {
-            estudiantesCalificados: cantidadCalificados,
-            punteoActual: actividad.PunteoMaximo,
-            punteoSolicitado: PunteoMaximo,
-            mensaje: 'Para cambiar el punteo, primero debe eliminar todas las calificaciones de esta actividad',
-          },
-        });
-      }
     }
 
     // ============================================
@@ -181,6 +199,23 @@ exports.delete = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Actividad no encontrada' });
     }
 
+    // ============================================
+    // VALIDACIÓN CRÍTICA: No permitir eliminar actividad con calificaciones
+    // ============================================
+    const cantidadCalificaciones = await Calificacion.count({
+      where: { IdActividad: id }
+    });
+
+    if (cantidadCalificaciones > 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No se puede eliminar una actividad con calificaciones asignadas',
+        tieneCalificaciones: true,
+        cantidadCalificaciones: cantidadCalificaciones,
+        mensaje: 'Esta actividad tiene calificaciones de estudiantes. Eliminarla afectaría sus notas finales.'
+      });
+    }
+
     await actividad.update({
       Estado: false,
       ModificadoPor,
@@ -204,6 +239,40 @@ exports.delete = async (req, res) => {
 // ============================================
 // NUEVAS FUNCIONALIDADES - SISTEMA DE ACTIVIDADES COMPLETO
 // ============================================
+
+/**
+ * Verificar si una actividad tiene calificaciones asignadas
+ * GET /api/actividades/:id/tiene-calificaciones
+ */
+exports.tieneCalificaciones = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const actividad = await Actividad.findByPk(id);
+    if (!actividad) {
+      return res.status(404).json({ success: false, error: 'Actividad no encontrada' });
+    }
+
+    const cantidadCalificaciones = await Calificacion.count({
+      where: { IdActividad: id }
+    });
+
+    res.json({
+      success: true,
+      tieneCalificaciones: cantidadCalificaciones > 0,
+      cantidad: cantidadCalificaciones,
+      actividad: {
+        IdActividad: actividad.IdActividad,
+        NombreActividad: actividad.NombreActividad,
+        PunteoMaximo: actividad.PunteoMaximo,
+        TipoActividad: actividad.TipoActividad
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error al verificar calificaciones:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
 
 /**
  * Obtener todas las actividades de una unidad (zona y final)

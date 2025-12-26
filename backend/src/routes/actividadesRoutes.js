@@ -16,6 +16,9 @@ router.post('/unidad/:idUnidad/batch', validarPropiedadActividad, actividadesCon
 // Validar suma de actividades (antes de crear)
 router.post('/unidad/:idUnidad/validar-suma', actividadesController.validarSuma);
 
+// Verificar si actividad tiene calificaciones
+router.get('/:id/tiene-calificaciones', actividadesController.tieneCalificaciones);
+
 // Obtener calificaciones de una actividad
 router.get('/:id/calificaciones', actividadesController.getCalificaciones);
 
