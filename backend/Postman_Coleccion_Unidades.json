@@ -1,0 +1,396 @@
+{
+  "info": {
+    "name": "API Colegio - Gestión de Unidades",
+    "description": "Colección de endpoints para gestionar unidades de asignaciones docentes",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "1. Login (Obtener Token)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"NombreUsuario\": \"admin\",\n  \"Contrasena\": \"admin123\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:4000/api/login",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4000",
+          "path": ["api", "login"]
+        },
+        "description": "Obtiene el token JWT. Copiar el token y pegarlo en la variable {{jwt_token}}"
+      }
+    },
+    {
+      "name": "2. Obtener Unidades de Asignación",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:4000/api/unidades/asignacion/:idAsignacion",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4000",
+          "path": ["api", "unidades", "asignacion", ":idAsignacion"],
+          "variable": [
+            {
+              "key": "idAsignacion",
+              "value": "1",
+              "description": "ID de la asignación docente"
+            }
+          ]
+        },
+        "description": "Obtiene las 4 unidades de una asignación específica"
+      }
+    },
+    {
+      "name": "3. Configurar Punteos - 60/40 (Default)",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"PunteoZona\": 60,\n  \"PunteoFinal\": 40,\n  \"ModificadoPor\": \"admin\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:4000/api/unidades/:idUnidad/punteos",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4000",
+          "path": ["api", "unidades", ":idUnidad", "punteos"],
+          "variable": [
+            {
+              "key": "idUnidad",
+              "value": "1",
+              "description": "ID de la unidad a actualizar"
+            }
+          ]
+        },
+        "description": "Configuración por defecto: 60 puntos zona + 40 puntos examen final"
+      }
+    },
+    {
+      "name": "4. Configurar Punteos - 70/30",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"PunteoZona\": 70,\n  \"PunteoFinal\": 30,\n  \"ModificadoPor\": \"admin\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:4000/api/unidades/:idUnidad/punteos",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4000",
+          "path": ["api", "unidades", ":idUnidad", "punteos"],
+          "variable": [
+            {
+              "key": "idUnidad",
+              "value": "1"
+            }
+          ]
+        },
+        "description": "Configuración 70/30"
+      }
+    },
+    {
+      "name": "5. Configurar Punteos - 90/10",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"PunteoZona\": 90,\n  \"PunteoFinal\": 10,\n  \"ModificadoPor\": \"admin\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:4000/api/unidades/:idUnidad/punteos",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4000",
+          "path": ["api", "unidades", ":idUnidad", "punteos"],
+          "variable": [
+            {
+              "key": "idUnidad",
+              "value": "1"
+            }
+          ]
+        },
+        "description": "Configuración 90/10"
+      }
+    },
+    {
+      "name": "6. Configurar Punteos - 100/0 (Solo Zona)",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"PunteoZona\": 100,\n  \"PunteoFinal\": 0,\n  \"ModificadoPor\": \"admin\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:4000/api/unidades/:idUnidad/punteos",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4000",
+          "path": ["api", "unidades", ":idUnidad", "punteos"],
+          "variable": [
+            {
+              "key": "idUnidad",
+              "value": "1"
+            }
+          ]
+        },
+        "description": "100% zona, 0% examen final (sin examen)"
+      }
+    },
+    {
+      "name": "7. Configurar Punteos - 0/100 (Solo Examen)",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"PunteoZona\": 0,\n  \"PunteoFinal\": 100,\n  \"ModificadoPor\": \"admin\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:4000/api/unidades/:idUnidad/punteos",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4000",
+          "path": ["api", "unidades", ":idUnidad", "punteos"],
+          "variable": [
+            {
+              "key": "idUnidad",
+              "value": "1"
+            }
+          ]
+        },
+        "description": "0% zona, 100% examen final (solo examen)"
+      }
+    },
+    {
+      "name": "8. ❌ ERROR - Suma incorrecta (debe fallar)",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"PunteoZona\": 60,\n  \"PunteoFinal\": 50,\n  \"ModificadoPor\": \"admin\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:4000/api/unidades/:idUnidad/punteos",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4000",
+          "path": ["api", "unidades", ":idUnidad", "punteos"],
+          "variable": [
+            {
+              "key": "idUnidad",
+              "value": "1"
+            }
+          ]
+        },
+        "description": "Esta petición DEBE FALLAR porque 60+50=110, no 100"
+      }
+    },
+    {
+      "name": "9. Cerrar Unidad Activa y Abrir Siguiente",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"ModificadoPor\": \"admin\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:4000/api/unidades/asignacion/:idAsignacion/cerrar-y-abrir",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4000",
+          "path": ["api", "unidades", "asignacion", ":idAsignacion", "cerrar-y-abrir"],
+          "variable": [
+            {
+              "key": "idAsignacion",
+              "value": "1",
+              "description": "ID de la asignación docente"
+            }
+          ]
+        },
+        "description": "Cierra la unidad actualmente activa y abre la siguiente (Ej: cierra Unidad 1, abre Unidad 2)"
+      }
+    },
+    {
+      "name": "10. Activar Unidad Específica",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"ModificadoPor\": \"admin\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:4000/api/unidades/:idUnidad/activar",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4000",
+          "path": ["api", "unidades", ":idUnidad", "activar"],
+          "variable": [
+            {
+              "key": "idUnidad",
+              "value": "3",
+              "description": "ID de la unidad a activar"
+            }
+          ]
+        },
+        "description": "Activa una unidad específica manualmente (cierra la que estaba activa)"
+      }
+    },
+    {
+      "name": "11. Obtener Unidad Específica",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:4000/api/unidades/:idUnidad",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4000",
+          "path": ["api", "unidades", ":idUnidad"],
+          "variable": [
+            {
+              "key": "idUnidad",
+              "value": "1"
+            }
+          ]
+        },
+        "description": "Obtiene los detalles de una unidad individual"
+      }
+    },
+    {
+      "name": "12. Actualizar Nombre de Unidad",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"NombreUnidad\": \"Unidad 1 - Introducción a Matemáticas\",\n  \"ModificadoPor\": \"admin\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:4000/api/unidades/:idUnidad",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4000",
+          "path": ["api", "unidades", ":idUnidad"],
+          "variable": [
+            {
+              "key": "idUnidad",
+              "value": "1"
+            }
+          ]
+        },
+        "description": "Actualiza el nombre de una unidad"
+      }
+    },
+    {
+      "name": "13. Actualizar Nombre + Punteos",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"NombreUnidad\": \"Unidad 2 - Álgebra Básica\",\n  \"PunteoZona\": 80,\n  \"PunteoFinal\": 20,\n  \"ModificadoPor\": \"admin\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:4000/api/unidades/:idUnidad",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4000",
+          "path": ["api", "unidades", ":idUnidad"],
+          "variable": [
+            {
+              "key": "idUnidad",
+              "value": "2"
+            }
+          ]
+        },
+        "description": "Actualiza nombre Y punteos en una sola llamada"
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "jwt_token",
+      "value": "TU_TOKEN_AQUI",
+      "type": "string"
+    }
+  ]
+}

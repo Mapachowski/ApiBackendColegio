@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir /b \"E:\\\\Colegio\")",
+      "Bash(dir /b \"E:\\\\Colegio\\\\ApiBackendColegio\")",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(node -c:*)",
+      "Bash(node:*)",
+      "Bash(npm start)",
+      "Bash(curl:*)",
+      "Bash(dir:*)",
+      "Bash(taskkill:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(git remote add:*)",
+      "Bash(git fetch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}
