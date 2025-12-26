@@ -174,14 +174,9 @@ exports.update = async (req, res) => {
 exports.delete = async (req, res) => {
   try {
     const { id } = req.params;
-    const { ModificadoPor } = req.body;
 
-    if (!ModificadoPor || ModificadoPor.trim() === '') {
-      return res.status(400).json({
-        success: false,
-        error: 'ModificadoPor es requerido',
-      });
-    }
+    // Obtener usuario del token JWT (agregado por middleware de autenticación)
+    const ModificadoPor = req.usuario?.email || req.usuario?.nombre || 'Sistema';
 
     const actividad = await Actividad.findByPk(id);
     if (!actividad) {
@@ -194,8 +189,16 @@ exports.delete = async (req, res) => {
       FechaModificado: new Date(),
     });
 
-    res.json({ success: true, message: 'Actividad marcada como inactiva' });
+    res.json({
+      success: true,
+      message: 'Actividad eliminada exitosamente',
+      data: {
+        IdActividad: actividad.IdActividad,
+        NombreActividad: actividad.NombreActividad
+      }
+    });
   } catch (error) {
+    console.error('❌ Error al eliminar actividad:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };

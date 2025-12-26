@@ -1,4 +1,3 @@
-const Actividad = require('../models/Actividad');
 const Unidad = require('../models/Unidad');
 const AsignacionDocente = require('../models/AsignacionDocente');
 const Docente = require('../models/Docente');
@@ -28,6 +27,7 @@ const validarPropiedadActividad = async (req, res, next) => {
     // Docente (4): Validar propiedad
     if (userRole === 4) {
       const { id, idUnidad } = req.params;
+      const { IdUnidad: idUnidadBody } = req.body || {};
 
       // Obtener IdDocente del usuario
       const docente = await Docente.findOne({
@@ -47,7 +47,7 @@ const validarPropiedadActividad = async (req, res, next) => {
 
       let perteneceAlDocente = false;
 
-      // CASO 1: Validar por IdUnidad (rutas /unidad/:idUnidad/...)
+      // CASO 1: Validar por IdUnidad en params (rutas /unidad/:idUnidad/...)
       if (idUnidad) {
         const unidad = await Unidad.findOne({
           where: { IdUnidad: idUnidad, Estado: true },
@@ -59,25 +59,46 @@ const validarPropiedadActividad = async (req, res, next) => {
         });
 
         perteneceAlDocente = !!unidad;
-        console.log('🔍 Unidad encontrada (por idUnidad):', !!unidad);
+        console.log('🔍 Unidad encontrada (por idUnidad en params):', !!unidad);
 
-      // CASO 2: Validar por IdActividad (rutas /:id)
-      } else if (id) {
-        const actividad = await Actividad.findOne({
-          where: { IdActividad: id, Estado: true },
+      // CASO 2: POST /actividades - Validar por IdUnidad en body (crear actividad nueva)
+      } else if (req.method === 'POST' && idUnidadBody) {
+        const unidad = await Unidad.findOne({
+          where: { IdUnidad: idUnidadBody, Estado: true },
           include: [{
-            model: Unidad,
-            required: true,
-            include: [{
-              model: AsignacionDocente,
-              where: { IdDocente: idDocente, Estado: true },
-              required: true
-            }]
+            model: AsignacionDocente,
+            where: { IdDocente: idDocente, Estado: true },
+            required: true
           }]
         });
 
-        perteneceAlDocente = !!actividad;
-        console.log('🔍 Actividad encontrada (por id):', !!actividad);
+        perteneceAlDocente = !!unidad;
+        console.log('🔍 Unidad encontrada (por IdUnidad en body - POST):', !!unidad);
+
+      // CASO 3: PUT/DELETE - Validar por IdActividad (modificar actividad existente)
+      } else if (id) {
+        // Usar query directa para mayor robustez
+        const { QueryTypes } = require('sequelize');
+        const sequelize = require('../config/database');
+
+        const [resultado] = await sequelize.query(
+          `SELECT COUNT(*) as count
+           FROM actividades a
+           INNER JOIN unidades u ON a.IdUnidad = u.IdUnidad
+           INNER JOIN asignacion_docente ad ON u.IdAsignacionDocente = ad.IdAsignacionDocente
+           WHERE a.IdActividad = :idActividad
+             AND a.Estado = 1
+             AND u.Estado = 1
+             AND ad.Estado = 1
+             AND ad.IdDocente = :idDocente`,
+          {
+            replacements: { idActividad: id, idDocente },
+            type: QueryTypes.SELECT
+          }
+        );
+
+        perteneceAlDocente = resultado.count > 0;
+        console.log('🔍 Actividad encontrada (por id - PUT/DELETE):', perteneceAlDocente, '| Count:', resultado.count);
       }
 
       if (!perteneceAlDocente) {
