@@ -25,6 +25,7 @@ const asignacionesRoutes = require('./asignacionesRoutes');
 const unidadesRoutes = require('./unidadesRoutes');
 const actividadesRoutes = require('./actividadesRoutes');
 const calificacionesRoutes = require('./calificacionesRoutes');
+const notasUnidadRoutes = require('./notasUnidadRoutes');
 const cursosRoutes = require('./cursosRoutes');
 
 // ==========================================
@@ -66,6 +67,7 @@ router.use('/asignaciones', asignacionesRoutes);
 router.use('/unidades', unidadesRoutes);
 router.use('/actividades', actividadesRoutes);
 router.use('/calificaciones', calificacionesRoutes);
+router.use('/notas-unidad', notasUnidadRoutes);
 router.use('/cursos', cursosRoutes);
 
 module.exports = router;
