@@ -2,6 +2,8 @@ const sequelize = require('../config/database');
 const Unidad = require('../models/Unidad');
 const AsignacionDocente = require('../models/AsignacionDocente');
 const Actividad = require('../models/Actividad');
+const Calificacion = require('../models/Calificacion');
+const notasUnidadController = require('./notasUnidadController');
 
 // Obtener todas las unidades de una asignación
 exports.getByAsignacion = async (req, res) => {

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const unidadesController = require('../controllers/unidadesController');
+const cierreUnidadController = require('../controllers/cierreUnidadController');
 const validarPropiedadUnidad = require('../middleware/validarPropiedadUnidad');
 
 // ==========================================
@@ -13,6 +14,7 @@ router.get('/reporte-incompletas', unidadesController.reporteUnidadesIncompletas
 
 router.get('/asignacion/:idAsignacion', unidadesController.getByAsignacion);
 router.get('/:id/validar', unidadesController.validarPunteos);
+router.get('/:id/validar-cierre', cierreUnidadController.validarCierre);
 router.get('/:id/resumen', unidadesController.getResumen);
 router.get('/:id/actividades', unidadesController.getActividades);
 router.get('/:id', unidadesController.getById);
@@ -24,6 +26,9 @@ router.get('/:id', unidadesController.getById);
 
 // Cerrar unidad actual y abrir siguiente (usa idAsignacion)
 router.post('/asignacion/:idAsignacion/cerrar-y-abrir', validarPropiedadUnidad, unidadesController.cerrarYAbrirSiguiente);
+
+// Cerrar unidad y calcular notas finales
+router.post('/:id/cerrar', validarPropiedadUnidad, cierreUnidadController.cerrarUnidad);
 
 // Activar una unidad específica
 router.put('/:id/activar', validarPropiedadUnidad, unidadesController.activar);

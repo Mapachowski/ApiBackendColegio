@@ -110,11 +110,24 @@ exports.updateBatchActividad = async (req, res) => {
     }
 
     // Verificar que la actividad existe
-    const actividad = await Actividad.findByPk(idActividad);
+    const actividad = await Actividad.findByPk(idActividad, {
+      include: [{ model: Unidad }]
+    });
     if (!actividad) {
       return res.status(404).json({
         success: false,
         error: 'Actividad no encontrada'
+      });
+    }
+
+    // ============================================
+    // VALIDACIÓN CRÍTICA: Verificar que la unidad esté activa
+    // ============================================
+    if (!actividad.Unidad || actividad.Unidad.Activa === 0) {
+      return res.status(403).json({
+        success: false,
+        error: 'No puedes modificar calificaciones de una unidad cerrada. Solicita reapertura al administrador.',
+        unidadCerrada: true
       });
     }
 

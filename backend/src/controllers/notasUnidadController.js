@@ -63,8 +63,8 @@ exports.calcularNotaAlumno = async (req, res) => {
       }
     });
 
-    // Calcular nota total
-    const notaTotal = notaZona + notaFinal;
+    // Calcular nota total y redondear a entero (redondeo matemático normal)
+    const notaTotal = Math.round(notaZona + notaFinal);
 
     // Determinar si aprobó (nota >= 60)
     const aprobado = notaTotal >= 60;
@@ -208,8 +208,8 @@ exports.calcularNotaAlumnoInterno = async (IdUnidad, IdAlumno, unidad, usuarioId
     }
   });
 
-  // Calcular nota total
-  const notaTotal = notaZona + notaFinal;
+  // Calcular nota total y redondear a entero (redondeo matemático normal)
+  const notaTotal = Math.round(notaZona + notaFinal);
 
   // Determinar si aprobó (nota >= 60)
   const aprobado = notaTotal >= 60;

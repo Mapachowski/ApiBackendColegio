@@ -1,4 +1,5 @@
 const sequelize = require('../config/database');
+const { Op } = require('sequelize');
 const Actividad = require('../models/Actividad');
 const Unidad = require('../models/Unidad');
 const Calificacion = require('../models/Calificacion');
@@ -327,6 +328,44 @@ exports.getByUnidad = async (req, res) => {
       order: [['TipoActividad', 'ASC'], ['FechaActividad', 'ASC']],
     });
 
+    // Obtener total de alumnos inscritos en esta unidad
+    const [alumnos] = await sequelize.query(
+      `SELECT DISTINCT a.IdAlumno
+       FROM actividades act
+       INNER JOIN unidades u ON act.IdUnidad = u.IdUnidad
+       INNER JOIN asignacion_docente ad ON u.IdAsignacionDocente = ad.IdAsignacionDocente
+       INNER JOIN inscripciones i ON
+           i.IdGrado = ad.IdGrado
+           AND i.IdSeccion = ad.IdSeccion
+           AND i.IdJornada = ad.IdJornada
+           AND i.CicloEscolar = ad.Anio
+       INNER JOIN alumnos a ON i.IdAlumno = a.IdAlumno
+       WHERE act.IdUnidad = :idUnidad
+         AND i.Estado = 1
+         AND a.Estado = 1`,
+      { replacements: { idUnidad } }
+    );
+
+    const totalAlumnos = alumnos.length;
+
+    // Enriquecer cada actividad con contadores de calificaciones
+    const actividadesConContadores = await Promise.all(
+      actividades.map(async (actividad) => {
+        const alumnosCalificados = await Calificacion.count({
+          where: {
+            IdActividad: actividad.IdActividad,
+            Punteo: { [Op.ne]: null }
+          }
+        });
+
+        return {
+          ...actividad.toJSON(),
+          AlumnosCalificados: alumnosCalificados,
+          TotalAlumnos: totalAlumnos
+        };
+      })
+    );
+
     // Calcular totales SOLO con actividades activas (Estado = true)
     const totales = {
       zona: 0,
@@ -334,7 +373,7 @@ exports.getByUnidad = async (req, res) => {
       total: 0,
     };
 
-    const actividadesActivas = actividades.filter(act => act.Estado === true);
+    const actividadesActivas = actividadesConContadores.filter(act => act.Estado === true);
 
     actividadesActivas.forEach((act) => {
       const punteo = parseFloat(act.PunteoMaximo);
@@ -344,11 +383,11 @@ exports.getByUnidad = async (req, res) => {
 
     res.json({
       success: true,
-      data: actividades, // Devolver todas (activas e inactivas)
+      data: actividadesConContadores, // Devolver todas con contadores
       totales, // Totales solo de activas
-      cantidad: actividades.length,
+      cantidad: actividadesConContadores.length,
       cantidadActivas: actividadesActivas.length,
-      cantidadInactivas: actividades.length - actividadesActivas.length,
+      cantidadInactivas: actividadesConContadores.length - actividadesActivas.length,
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
