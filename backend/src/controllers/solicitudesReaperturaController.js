@@ -14,8 +14,7 @@ const Seccion = require('../models/Seccion');
  */
 exports.crearSolicitud = async (req, res) => {
   try {
-    const { IdUnidad, Motivo } = req.body;
-    const idDocente = req.usuario?.idDocente;
+    const { IdUnidad, Motivo, IdDocente } = req.body;
 
     if (!IdUnidad || !Motivo) {
       return res.status(400).json({
@@ -24,10 +23,30 @@ exports.crearSolicitud = async (req, res) => {
       });
     }
 
+    // Obtener idDocente: primero del body, luego del token, finalmente buscar en BD
+    let idDocente = IdDocente || req.usuario?.idDocente;
+
+    if (!idDocente && req.usuario?.id) {
+      // Buscar el docente por IdUsuario
+      const docente = await Docente.findOne({
+        where: { idUsuario: req.usuario.id, Estado: 1 }
+      });
+
+      if (docente) {
+        idDocente = docente.idDocente;
+      }
+    }
+
     if (!idDocente) {
       return res.status(403).json({
         success: false,
-        error: 'Solo docentes pueden solicitar reapertura'
+        error: 'Solo docentes pueden solicitar reapertura',
+        debug: {
+          tieneIdDocenteEnBody: !!IdDocente,
+          tieneIdDocenteEnToken: !!req.usuario?.idDocente,
+          idUsuario: req.usuario?.id,
+          rol: req.usuario?.rol
+        }
       });
     }
 
