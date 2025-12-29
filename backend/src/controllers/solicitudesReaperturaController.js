@@ -219,7 +219,9 @@ exports.procesarSolicitud = async (req, res) => {
 
   try {
     const { id } = req.params;
-    const { Accion, ObservacionesAprobacion } = req.body;
+    // Soportar ambos formatos: Accion/accion y ObservacionesAprobacion/observaciones
+    const Accion = req.body.Accion || req.body.accion;
+    const ObservacionesAprobacion = req.body.ObservacionesAprobacion || req.body.observaciones;
     const rolUsuario = req.usuario?.rol;
     const idUsuario = req.usuario?.id;
 
