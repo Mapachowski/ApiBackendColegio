@@ -76,10 +76,11 @@ exports.crearSolicitud = async (req, res) => {
       });
     }
 
-    // Verificar que no haya otra solicitud pendiente para esta unidad
+    // Verificar que no haya otra solicitud pendiente para esta unidad del mismo docente
     const solicitudPendiente = await SolicitudReapertura.findOne({
       where: {
         IdUnidad,
+        SolicitadoPor: idDocente,
         Estado: 'pendiente'
       }
     });
@@ -119,6 +120,45 @@ exports.crearSolicitud = async (req, res) => {
 };
 
 /**
+ * Obtener contador de solicitudes pendientes (para badge/notificación)
+ * GET /api/solicitudes-reapertura/contador
+ */
+exports.contadorPendientes = async (req, res) => {
+  try {
+    const rolUsuario = req.usuario?.rol;
+
+    // Solo administradores y operadores pueden ver el contador
+    if (rolUsuario !== 1 && rolUsuario !== 2) {
+      return res.status(403).json({
+        success: false,
+        error: 'Solo administradores y operadores pueden ver solicitudes pendientes'
+      });
+    }
+
+    // Obtener conteo de solicitudes pendientes
+    const [resultado] = await sequelize.query(`
+      SELECT COUNT(*) as total
+      FROM solicitudes_reapertura
+      WHERE Estado = 'pendiente'
+    `);
+
+    const total = resultado[0]?.total || 0;
+
+    res.json({
+      success: true,
+      data: {
+        pendientes: parseInt(total),
+        tieneNotificaciones: parseInt(total) > 0
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error al obtener contador de solicitudes:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+/**
  * Administrador obtiene lista de solicitudes pendientes
  * GET /api/solicitudes-reapertura/pendientes
  */
@@ -140,17 +180,17 @@ exports.obtenerPendientes = async (req, res) => {
         sr.IdSolicitud,
         sr.IdUnidad,
         u.NombreUnidad,
-        c.NombreCurso,
+        c.Curso AS NombreCurso,
         g.NombreGrado,
         s.NombreSeccion,
-        CONCAT(d.Nombres, ' ', d.Apellidos) AS DocenteSolicitante,
+        d.NombreDocente AS DocenteSolicitante,
         sr.Motivo,
         sr.FechaSolicitud,
         sr.Estado
       FROM solicitudes_reapertura sr
       INNER JOIN unidades u ON sr.IdUnidad = u.IdUnidad
       INNER JOIN asignacion_docente ad ON u.IdAsignacionDocente = ad.IdAsignacionDocente
-      INNER JOIN cursos c ON ad.IdCurso = c.IdCurso
+      INNER JOIN cursos c ON ad.IdCurso = c.idCurso
       INNER JOIN grados g ON ad.IdGrado = g.IdGrado
       INNER JOIN secciones s ON ad.IdSeccion = s.IdSeccion
       INNER JOIN docentes d ON sr.SolicitadoPor = d.idDocente
@@ -274,12 +314,29 @@ exports.procesarSolicitud = async (req, res) => {
  */
 exports.misSolicitudes = async (req, res) => {
   try {
-    const idDocente = req.usuario?.idDocente;
+    // Obtener idDocente: primero del token, luego buscar en BD por IdUsuario
+    let idDocente = req.usuario?.idDocente;
+
+    if (!idDocente && req.usuario?.id) {
+      // Buscar el docente por IdUsuario
+      const docente = await Docente.findOne({
+        where: { idUsuario: req.usuario.id, Estado: 1 }
+      });
+
+      if (docente) {
+        idDocente = docente.idDocente;
+      }
+    }
 
     if (!idDocente) {
       return res.status(403).json({
         success: false,
-        error: 'Solo docentes pueden ver sus solicitudes'
+        error: 'Solo docentes pueden ver sus solicitudes',
+        debug: {
+          tieneIdDocenteEnToken: !!req.usuario?.idDocente,
+          idUsuario: req.usuario?.id,
+          rol: req.usuario?.rol
+        }
       });
     }
 
@@ -289,17 +346,17 @@ exports.misSolicitudes = async (req, res) => {
         sr.IdSolicitud,
         sr.IdUnidad,
         u.NombreUnidad,
-        c.NombreCurso,
+        c.Curso AS NombreCurso,
         sr.Motivo,
         sr.Estado,
         sr.FechaSolicitud,
         sr.FechaAprobacion,
-        CONCAT(us.Nombre, ' ', COALESCE(us.Apellido, '')) AS AprobadoPor,
+        us.NombreCompleto AS AprobadoPor,
         sr.ObservacionesAprobacion
       FROM solicitudes_reapertura sr
       INNER JOIN unidades u ON sr.IdUnidad = u.IdUnidad
       INNER JOIN asignacion_docente ad ON u.IdAsignacionDocente = ad.IdAsignacionDocente
-      INNER JOIN cursos c ON ad.IdCurso = c.IdCurso
+      INNER JOIN cursos c ON ad.IdCurso = c.idCurso
       LEFT JOIN usuarios us ON sr.AprobadoPor = us.IdUsuario
       WHERE sr.SolicitadoPor = :idDocente
       ORDER BY sr.FechaSolicitud DESC

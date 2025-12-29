@@ -16,6 +16,9 @@ router.get('/mis-solicitudes', solicitudesReaperturaController.misSolicitudes);
 // RUTAS PARA ADMINISTRADORES
 // ==========================================
 
+// Obtener contador de solicitudes pendientes (para badge/notificación)
+router.get('/contador', solicitudesReaperturaController.contadorPendientes);
+
 // Admin obtiene lista de solicitudes pendientes
 router.get('/pendientes', solicitudesReaperturaController.obtenerPendientes);
 
