@@ -161,15 +161,34 @@ exports.obtenerCalificaciones = async (req, res) => {
       });
     });
 
-    // 4. Calcular promedios por curso
+    // 4. Calcular promedios por curso (SIEMPRE dividir entre 4 unidades)
     const cursos = Object.values(cursosMap).map(curso => {
-      const notasUnidades = curso.unidades.map(u => u.NotaFinal);
-      const promedio = notasUnidades.length > 0
-        ? Math.round(notasUnidades.reduce((sum, nota) => sum + nota, 0) / notasUnidades.length)
-        : 0;
+      // Asegurar que siempre haya 4 unidades (rellenar con 0 las faltantes)
+      const unidadesCompletas = [];
+      let sumaNotas = 0;
+
+      for (let numUnidad = 1; numUnidad <= 4; numUnidad++) {
+        const unidadExistente = curso.unidades.find(u => u.NumeroUnidad === numUnidad);
+
+        if (unidadExistente) {
+          unidadesCompletas.push(unidadExistente);
+          sumaNotas += unidadExistente.NotaFinal;
+        } else {
+          // Unidad sin calificación, agregar con nota 0
+          unidadesCompletas.push({
+            NumeroUnidad: numUnidad,
+            NotaFinal: 0
+          });
+          // sumaNotas += 0 (no es necesario sumar)
+        }
+      }
+
+      // IMPORTANTE: Siempre dividir entre 4, no entre la cantidad de notas
+      const promedio = Math.round(sumaNotas / 4);
 
       return {
         ...curso,
+        unidades: unidadesCompletas, // Devolver las 4 unidades completas
         promedio
       };
     });
@@ -334,13 +353,35 @@ exports.obtenerCalificacionesLote = async (req, res) => {
           });
         });
 
-        // 4. Calcular promedios
+        // 4. Calcular promedios (SIEMPRE dividir entre 4 unidades)
         const cursos = Object.values(cursosMap).map(curso => {
-          const notasUnidades = curso.unidades.map(u => u.NotaFinal);
-          const promedio = notasUnidades.length > 0
-            ? Math.round(notasUnidades.reduce((sum, nota) => sum + nota, 0) / notasUnidades.length)
-            : 0;
-          return { ...curso, promedio };
+          // Asegurar que siempre haya 4 unidades (rellenar con 0 las faltantes)
+          const unidadesCompletas = [];
+          let sumaNotas = 0;
+
+          for (let numUnidad = 1; numUnidad <= 4; numUnidad++) {
+            const unidadExistente = curso.unidades.find(u => u.NumeroUnidad === numUnidad);
+
+            if (unidadExistente) {
+              unidadesCompletas.push(unidadExistente);
+              sumaNotas += unidadExistente.NotaFinal;
+            } else {
+              // Unidad sin calificación, agregar con nota 0
+              unidadesCompletas.push({
+                NumeroUnidad: numUnidad,
+                NotaFinal: 0
+              });
+            }
+          }
+
+          // IMPORTANTE: Siempre dividir entre 4, no entre la cantidad de notas
+          const promedio = Math.round(sumaNotas / 4);
+
+          return {
+            ...curso,
+            unidades: unidadesCompletas, // Devolver las 4 unidades completas
+            promedio
+          };
         });
 
         console.log(`📚 Cursos procesados: ${cursos.length}`);
