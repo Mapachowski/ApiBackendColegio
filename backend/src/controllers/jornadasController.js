@@ -5,10 +5,11 @@ exports.getJornadas = async (req, res) => {
   try {
     const jornadas = await Jornada.findAll({
       where: { Estado: true },
+      order: [['NombreJornada', 'ASC']]
     });
-    res.status(200).json(jornadas);
+    res.status(200).json({ success: true, data: jornadas });
   } catch (error) {
-    res.status(500).json({ message: 'Error al obtener jornadas', error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 };
 
