@@ -28,6 +28,7 @@ const calificacionesRoutes = require('./calificacionesRoutes');
 const notasUnidadRoutes = require('./notasUnidadRoutes');
 const cursosRoutes = require('./cursosRoutes');
 const solicitudesReaperturaRoutes = require('./solicitudesReaperturaRoutes');
+const boletaCalificacionesRoutes = require('./boletaCalificacionesRoutes');
 
 // ==========================================
 // RUTAS PÚBLICAS (sin autenticación)
@@ -71,5 +72,6 @@ router.use('/calificaciones', calificacionesRoutes);
 router.use('/notas-unidad', notasUnidadRoutes);
 router.use('/cursos', cursosRoutes);
 router.use('/solicitudes-reapertura', solicitudesReaperturaRoutes);
+router.use('/boleta-calificaciones', boletaCalificacionesRoutes);
 
 module.exports = router;
