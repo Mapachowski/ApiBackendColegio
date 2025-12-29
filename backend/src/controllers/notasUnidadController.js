@@ -48,8 +48,13 @@ exports.calcularNotaAlumno = async (req, res) => {
     let notaZona = 0;
     actividadesZona.forEach(actividad => {
       const calificacion = calificaciones.find(c => c.IdActividad === actividad.IdActividad);
-      if (calificacion && calificacion.Punteo !== null) {
-        notaZona += parseFloat(calificacion.Punteo);
+      // IMPORTANTE: Punteo puede ser 0 (cero es válido)
+      if (calificacion && calificacion.Punteo !== null && calificacion.Punteo !== undefined) {
+        const punteo = parseFloat(calificacion.Punteo);
+        // Permitir 0 explícitamente
+        if (!isNaN(punteo)) {
+          notaZona += punteo;
+        }
       }
     });
 
@@ -58,8 +63,13 @@ exports.calcularNotaAlumno = async (req, res) => {
     let notaFinal = 0;
     actividadesFinal.forEach(actividad => {
       const calificacion = calificaciones.find(c => c.IdActividad === actividad.IdActividad);
-      if (calificacion && calificacion.Punteo !== null) {
-        notaFinal += parseFloat(calificacion.Punteo);
+      // IMPORTANTE: Punteo puede ser 0 (cero es válido)
+      if (calificacion && calificacion.Punteo !== null && calificacion.Punteo !== undefined) {
+        const punteo = parseFloat(calificacion.Punteo);
+        // Permitir 0 explícitamente
+        if (!isNaN(punteo)) {
+          notaFinal += punteo;
+        }
       }
     });
 
@@ -193,8 +203,13 @@ exports.calcularNotaAlumnoInterno = async (IdUnidad, IdAlumno, unidad, usuarioId
   let notaZona = 0;
   actividadesZona.forEach(actividad => {
     const calificacion = calificaciones.find(c => c.IdActividad === actividad.IdActividad);
-    if (calificacion && calificacion.Punteo !== null) {
-      notaZona += parseFloat(calificacion.Punteo);
+    // IMPORTANTE: Punteo puede ser 0 (cero es válido)
+    if (calificacion && calificacion.Punteo !== null && calificacion.Punteo !== undefined) {
+      const punteo = parseFloat(calificacion.Punteo);
+      // Permitir 0 explícitamente - 0 es un puntaje válido
+      if (!isNaN(punteo) && punteo >= 0) {
+        notaZona += punteo;
+      }
     }
   });
 
@@ -203,8 +218,13 @@ exports.calcularNotaAlumnoInterno = async (IdUnidad, IdAlumno, unidad, usuarioId
   let notaFinal = 0;
   actividadesFinal.forEach(actividad => {
     const calificacion = calificaciones.find(c => c.IdActividad === actividad.IdActividad);
-    if (calificacion && calificacion.Punteo !== null) {
-      notaFinal += parseFloat(calificacion.Punteo);
+    // IMPORTANTE: Punteo puede ser 0 (cero es válido)
+    if (calificacion && calificacion.Punteo !== null && calificacion.Punteo !== undefined) {
+      const punteo = parseFloat(calificacion.Punteo);
+      // Permitir 0 explícitamente - 0 es un puntaje válido
+      if (!isNaN(punteo) && punteo >= 0) {
+        notaFinal += punteo;
+      }
     }
   });
 
