@@ -30,4 +30,37 @@ router.post('/actualizar-estado', cierreUnidadesController.actualizarEstadoCurso
  */
 router.post('/actualizar-todos/:idUnidad', cierreUnidadesController.actualizarTodosEstados);
 
+/**
+ * ========================================
+ * FASE 4: Endpoints de Cierre de Unidades
+ * ========================================
+ */
+
+/**
+ * Validar si una unidad puede cerrarse
+ * Verifica que todos los cursos estén listos
+ */
+router.post('/validar-cierre/:idUnidad', cierreUnidadesController.validarCierre);
+
+/**
+ * Cerrar una unidad
+ * Solo administradores, requiere que todos los cursos estén listos
+ * Body (opcional): { observaciones: string }
+ */
+router.post('/cerrar/:idUnidad', cierreUnidadesController.cerrarUnidad);
+
+/**
+ * Extender plazo de calificación
+ * Solo administradores
+ * Body: { nuevaFechaLimite: string, notificarDocentes: boolean, observaciones: string }
+ */
+router.post('/extender-plazo/:idUnidad', cierreUnidadesController.extenderPlazo);
+
+/**
+ * Reabrir una unidad cerrada
+ * Solo administradores
+ * Body: { motivo: string (requerido), nuevaFechaLimite: string (opcional) }
+ */
+router.post('/reabrir/:idUnidad', cierreUnidadesController.reabrirUnidad);
+
 module.exports = router;
