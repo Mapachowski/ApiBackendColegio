@@ -5,8 +5,31 @@ const Usuario = require('../models/Usuario');
 // Obtener todos los alumnos con estado activo
 exports.getAll = async (req, res) => {
   try {
-    const alumnos = await Alumno.findAll({ where: { Estado: true } }); // Solo activos
-    res.json({ success: true, data: alumnos });
+    const { sinUsuario, idFamilia } = req.query;
+
+    // Construir filtros dinámicos
+    const filtros = { Estado: true }; // Solo activos
+
+    // Filtro para alumnos sin usuario asignado
+    if (sinUsuario === 'true') {
+      filtros.IdUsuario = null;
+    }
+
+    // Filtro por familia
+    if (idFamilia && !isNaN(idFamilia)) {
+      filtros.IdFamilia = parseInt(idFamilia);
+    }
+
+    const alumnos = await Alumno.findAll({
+      where: filtros,
+      order: [['Nombres', 'ASC'], ['Apellidos', 'ASC']] // Ordenar alfabéticamente
+    });
+
+    res.json({
+      success: true,
+      data: alumnos,
+      total: alumnos.length
+    });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

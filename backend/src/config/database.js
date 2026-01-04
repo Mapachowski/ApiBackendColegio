@@ -10,6 +10,9 @@ const sequelize = new Sequelize(
     host: process.env.DB_HOST,   // Host (127.0.0.1)
     port: process.env.DB_PORT,   // Puerto (3306)
     dialect: 'mysql',
+    dialectOptions: {
+    multipleStatements: true   // ← ESTO ES LA CLAVE
+  },
     logging: false,              // Evita mostrar logs en consola
     pool: {
       max: 5,

@@ -18,6 +18,10 @@ const Docente = sequelize.define('Docente', {
     type: DataTypes.STRING(200),
     allowNull: false,
   },
+  DPI: {
+    type: DataTypes.STRING(20),
+    allowNull: false,
+  },
   Email: {
     type: DataTypes.STRING(100),
     allowNull: true,
