@@ -1,6 +1,20 @@
 // ⚠️ IMPORTANTE: Cargar variables de entorno PRIMERO, antes de cualquier otra cosa
 const dotenv = require('dotenv');
-dotenv.config();
+const path = require('path');
+
+// Determinar qué archivo .env cargar según NODE_ENV
+const envFile = process.env.NODE_ENV === 'production'
+  ? '.env.production'
+  : '.env.development';
+
+const envPath = path.resolve(__dirname, '..', envFile);
+
+// Cargar el archivo .env correspondiente
+dotenv.config({ path: envPath });
+
+console.log(`🌍 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+console.log(`📁 Archivo .env: ${envFile}`);
+console.log(`🗄️  Base de datos: ${process.env.DB_NAME}`);
 
 const express = require('express');
 const sequelize = require('./config/database');

@@ -3,6 +3,7 @@ const { Op } = require('sequelize');
 const Actividad = require('../models/Actividad');
 const Unidad = require('../models/Unidad');
 const Calificacion = require('../models/Calificacion');
+const cierreUnidadesController = require('./cierreUnidadesController');
 
 // Obtener una actividad por ID
 exports.getById = async (req, res) => {
@@ -111,6 +112,25 @@ exports.create = async (req, res) => {
       });
     }
 
+    // ============================================
+    // VALIDACIÓN CRÍTICA: Verificar que la unidad esté activa
+    // ============================================
+    const unidad = await Unidad.findByPk(IdUnidad);
+    if (!unidad) {
+      return res.status(404).json({
+        success: false,
+        error: 'Unidad no encontrada'
+      });
+    }
+
+    if (unidad.Activa === 0) {
+      return res.status(403).json({
+        success: false,
+        error: 'No puedes crear actividades en una unidad cerrada. Solicita reapertura al administrador.',
+        unidadCerrada: true
+      });
+    }
+
     // El trigger tr_crear_calificaciones_actividad se encargará de crear las calificaciones automáticamente
     const nuevaActividad = await Actividad.create({
       IdUnidad,
@@ -122,6 +142,31 @@ exports.create = async (req, res) => {
       CreadoPor,
       FechaCreado: new Date(),
     });
+
+    // Recalcular estado del curso automáticamente
+    try {
+      // Reutilizamos la variable 'unidad' que ya obtuvimos en la validación
+      // Obtener IdCurso e IdDocente de la unidad
+      const [asignacion] = await sequelize.query(`
+        SELECT IdCurso, IdDocente
+        FROM asignacion_docente
+        WHERE IdAsignacionDocente = :idAsignacion
+      `, {
+        replacements: { idAsignacion: unidad.IdAsignacionDocente },
+        type: sequelize.QueryTypes.SELECT
+      });
+
+      if (asignacion) {
+        await cierreUnidadesController.recalcularEstadoCursoSilencioso(
+          IdUnidad,
+          asignacion.IdCurso,
+          asignacion.IdDocente
+        );
+      }
+    } catch (error) {
+      console.error('⚠️ Error al recalcular estado (no crítico):', error.message);
+      // No lanzamos error porque la actividad ya se creó exitosamente
+    }
 
     res.status(201).json({
       success: true,
@@ -142,37 +187,55 @@ exports.update = async (req, res) => {
     // Obtener usuario del token JWT (agregado por middleware de autenticación)
     const ModificadoPor = req.usuario?.email || req.usuario?.nombre || 'Sistema';
 
-    const actividad = await Actividad.findByPk(id);
+    const actividad = await Actividad.findByPk(id, {
+      include: [{ model: Unidad }]
+    });
     if (!actividad) {
       return res.status(404).json({ success: false, error: 'Actividad no encontrada' });
     }
 
     // ============================================
-    // VALIDACIÓN CRÍTICA: Verificar si tiene calificaciones asignadas
+    // VALIDACIÓN CRÍTICA: Verificar que la unidad esté activa
     // ============================================
-    const cantidadCalificaciones = await Calificacion.count({
-      where: { IdActividad: id }
+    if (!actividad.Unidad || actividad.Unidad.Activa === 0) {
+      return res.status(403).json({
+        success: false,
+        error: 'No puedes modificar actividades de una unidad cerrada. Solicita reapertura al administrador.',
+        unidadCerrada: true
+      });
+    }
+
+    // ============================================
+    // VALIDACIÓN CRÍTICA: Verificar si tiene calificaciones CON PUNTEO asignadas
+    // ============================================
+    // Solo contamos calificaciones que tienen punteo (no NULL)
+    // Esto permite inactivar actividades recién creadas que solo tienen calificaciones vacías
+    const cantidadCalificacionesConPunteo = await Calificacion.count({
+      where: {
+        IdActividad: id,
+        Punteo: { [Op.ne]: null }  // Solo contar calificaciones con punteo asignado
+      }
     });
 
-    if (cantidadCalificaciones > 0) {
-      // ❌ NO permitir inactivar actividad con calificaciones
+    if (cantidadCalificacionesConPunteo > 0) {
+      // ❌ NO permitir inactivar actividad con calificaciones que tienen punteo
       if (Estado !== undefined && (Estado === false || Estado === 0 || Estado === '0')) {
         return res.status(400).json({
           success: false,
-          error: 'No se puede inactivar una actividad con calificaciones asignadas',
+          error: 'No se puede inactivar una actividad con calificaciones registradas',
           tieneCalificaciones: true,
-          cantidadCalificaciones: cantidadCalificaciones,
-          mensaje: 'Esta actividad tiene calificaciones de estudiantes. Inactivarla afectaría sus notas.'
+          cantidadCalificaciones: cantidadCalificacionesConPunteo,
+          mensaje: 'Esta actividad tiene calificaciones de estudiantes con punteo asignado. Inactivarla afectaría sus notas.'
         });
       }
 
-      // ❌ NO permitir cambiar punteo máximo si tiene calificaciones
+      // ❌ NO permitir cambiar punteo máximo si tiene calificaciones con punteo
       if (PunteoMaximo !== undefined && parseFloat(PunteoMaximo) !== parseFloat(actividad.PunteoMaximo)) {
         return res.status(400).json({
           success: false,
-          error: 'No se puede cambiar el punteo de una actividad con calificaciones asignadas',
+          error: 'No se puede cambiar el punteo de una actividad con calificaciones registradas',
           tieneCalificaciones: true,
-          cantidadCalificaciones: cantidadCalificaciones,
+          cantidadCalificaciones: cantidadCalificacionesConPunteo,
           punteoActual: actividad.PunteoMaximo,
           punteoSolicitado: PunteoMaximo,
           mensaje: 'Esta actividad tiene calificaciones de estudiantes. Cambiar el punteo crearía inconsistencias.'
@@ -183,9 +246,9 @@ exports.update = async (req, res) => {
       if (TipoActividad !== undefined && TipoActividad !== actividad.TipoActividad) {
         return res.status(400).json({
           success: false,
-          error: 'No se puede cambiar el tipo de una actividad con calificaciones asignadas',
+          error: 'No se puede cambiar el tipo de una actividad con calificaciones registradas',
           tieneCalificaciones: true,
-          cantidadCalificaciones: cantidadCalificaciones,
+          cantidadCalificaciones: cantidadCalificacionesConPunteo,
           tipoActual: actividad.TipoActividad,
           tipoSolicitado: TipoActividad,
           mensaje: 'Esta actividad tiene calificaciones de estudiantes. Cambiar de zona a final (o viceversa) afectaría sus notas.'
@@ -218,6 +281,33 @@ exports.update = async (req, res) => {
       ModificadoPor,
       FechaModificado: new Date(),
     });
+
+    // Recalcular estado del curso automáticamente
+    try {
+      const unidad = await Unidad.findByPk(actividad.IdUnidad);
+      if (unidad) {
+        // Obtener IdCurso e IdDocente de la unidad
+        const [asignacion] = await sequelize.query(`
+          SELECT IdCurso, IdDocente
+          FROM asignacion_docente
+          WHERE IdAsignacionDocente = :idAsignacion
+        `, {
+          replacements: { idAsignacion: unidad.IdAsignacionDocente },
+          type: sequelize.QueryTypes.SELECT
+        });
+
+        if (asignacion) {
+          await cierreUnidadesController.recalcularEstadoCursoSilencioso(
+            actividad.IdUnidad,
+            asignacion.IdCurso,
+            asignacion.IdDocente
+          );
+        }
+      }
+    } catch (error) {
+      console.error('⚠️ Error al recalcular estado (no crítico):', error.message);
+      // No lanzamos error porque la actividad ya se actualizó exitosamente
+    }
 
     res.json({ success: true, data: actividad });
   } catch (error) {

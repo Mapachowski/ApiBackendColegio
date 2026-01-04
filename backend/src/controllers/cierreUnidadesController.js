@@ -4,7 +4,7 @@ const Actividad = require('../models/Actividad');
 const Calificacion = require('../models/Calificacion');
 const EstadoCursoUnidad = require('../models/EstadoCursoUnidad');
 const NotificacionDocente = require('../models/NotificacionDocente');
-const { Op } = require('sequelize');
+const { Op, QueryTypes } = require('sequelize');
 
 /**
  * Validar estado de todos los cursos de una unidad
@@ -279,6 +279,32 @@ exports.actualizarEstadoCurso = async (req, res) => {
   } catch (error) {
     console.error('❌ Error al actualizar estado de curso:', error);
     res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+/**
+ * Recalcular estado de un curso de forma silenciosa (sin respuesta HTTP)
+ * Útil para llamar desde otros controladores después de crear/actualizar actividades o calificaciones
+ */
+exports.recalcularEstadoCursoSilencioso = async (IdUnidad, IdCurso, IdDocente) => {
+  try {
+    // Calcular estado actual del curso
+    const estadoCurso = await this.calcularEstadoCurso(IdUnidad, IdCurso, IdDocente);
+
+    // Insertar o actualizar en la tabla estado_cursos_unidad
+    await EstadoCursoUnidad.upsert({
+      IdUnidad,
+      IdCurso,
+      IdDocente,
+      ...estadoCurso,
+      UltimaActualizacion: new Date()
+    });
+
+    console.log(`✅ Estado recalculado: Unidad ${IdUnidad}, Curso ${IdCurso} → ${estadoCurso.EstadoGeneral}`);
+    return estadoCurso;
+  } catch (error) {
+    console.error('❌ Error al recalcular estado silencioso:', error);
+    throw error;
   }
 };
 
@@ -959,6 +985,590 @@ exports.reabrirUnidad = async (req, res) => {
   } catch (error) {
     await transaction.rollback();
     console.error('❌ Error al reabrir unidad:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ==========================================
+// 7. CERRAR SOLO CURSOS LISTOS DE UNA UNIDAD
+// ==========================================
+
+/**
+ * Cierra solo los cursos con EstadoGeneral='LISTO' de una unidad específica
+ * y abre automáticamente la siguiente unidad para esos cursos.
+ *
+ * POST /api/cierre-unidades/cerrar-cursos-listos/:idUnidad
+ *
+ * Diferencia con cerrarUnidad:
+ * - cerrarUnidad: cierra TODA la unidad (todos los cursos o ninguno)
+ * - cerrarCursosListos: cierra SOLO cursos listos, deja abiertos los pendientes
+ */
+exports.cerrarCursosListos = async (req, res) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const { idUnidad } = req.params;
+    const { observaciones } = req.body;
+
+    // 1. VALIDAR PERMISOS
+    if (req.usuario.rol !== 1) {
+      await transaction.rollback();
+      return res.status(403).json({
+        success: false,
+        error: 'Solo administradores pueden cerrar cursos'
+      });
+    }
+
+    // 2. VERIFICAR QUE LA UNIDAD EXISTE
+    const unidad = await Unidad.findByPk(idUnidad);
+    if (!unidad) {
+      await transaction.rollback();
+      return res.status(404).json({
+        success: false,
+        error: 'Unidad no encontrada'
+      });
+    }
+
+    const numeroUnidadActual = unidad.NumeroUnidad;
+    const numeroUnidadSiguiente = numeroUnidadActual + 1;
+
+    console.log(`\n🔍 Procesando cierre parcial de Unidad ${numeroUnidadActual}...`);
+
+    // 3. OBTENER TOTAL DE CURSOS DE ESTA UNIDAD (para estadísticas)
+    const totalCursosQuery = `
+      SELECT COUNT(DISTINCT ecu.IdCurso) as total
+      FROM estado_cursos_unidad ecu
+      WHERE ecu.IdUnidad = ?
+    `;
+    const [totalResult] = await sequelize.query(totalCursosQuery, {
+      replacements: [idUnidad],
+      type: QueryTypes.SELECT,
+      transaction
+    });
+    const totalCursos = totalResult?.total || 0;
+
+    // 4. OBTENER CURSOS LISTOS PARA CERRAR
+    const cursosListosQuery = `
+      SELECT
+        ecu.IdCurso,
+        ecu.IdDocente,
+        ecu.EstadoGeneral,
+        c.Curso AS NombreCurso,
+        g.NombreGrado,
+        s.NombreSeccion,
+        j.NombreJornada,
+        d.NombreDocente
+      FROM estado_cursos_unidad ecu
+      INNER JOIN unidades un ON ecu.IdUnidad = un.IdUnidad
+      INNER JOIN asignacion_docente ad ON un.IdAsignacionDocente = ad.IdAsignacionDocente
+      INNER JOIN cursos c ON ecu.IdCurso = c.idCurso
+      INNER JOIN grados g ON c.IdGrado = g.IdGrado
+      INNER JOIN secciones s ON ad.IdSeccion = s.IdSeccion
+      INNER JOIN jornadas j ON ad.IdJornada = j.IdJornada
+      INNER JOIN docentes d ON ecu.IdDocente = d.idDocente
+      WHERE ecu.IdUnidad = ? AND ecu.EstadoGeneral = 'LISTO'
+    `;
+
+    const cursosListos = await sequelize.query(cursosListosQuery, {
+      replacements: [idUnidad],
+      type: QueryTypes.SELECT,
+      transaction
+    });
+
+    console.log(`✅ Cursos listos para cerrar: ${cursosListos.length} de ${totalCursos}`);
+
+    // 5. SI NO HAY CURSOS LISTOS, RETORNAR
+    if (cursosListos.length === 0) {
+      await transaction.rollback();
+      return res.json({
+        success: true,
+        data: {
+          IdUnidad: parseInt(idUnidad),
+          NumeroUnidad: numeroUnidadActual,
+          NombreUnidad: unidad.NombreUnidad,
+          totalCursosAnalizados: totalCursos,
+          cursosCerrados: 0,
+          cursosConPendientes: totalCursos
+        },
+        message: 'No hay cursos listos para cerrar en esta unidad'
+      });
+    }
+
+    // 6. VERIFICAR SI LA SIGUIENTE UNIDAD EXISTE
+    let siguienteUnidad = null;
+    if (numeroUnidadSiguiente <= 4) {
+      siguienteUnidad = await Unidad.findOne({
+        where: { NumeroUnidad: numeroUnidadSiguiente },
+        transaction
+      });
+    }
+
+    if (!siguienteUnidad) {
+      console.log(`⚠️  Unidad ${numeroUnidadActual} es la última, no se abrirá siguiente`);
+    }
+
+    // 7. PROCESAR CADA CURSO LISTO
+    const cursosActualizados = [];
+
+    for (const curso of cursosListos) {
+      const { IdCurso, IdDocente, NombreCurso, NombreGrado, NombreSeccion, NombreJornada, NombreDocente } = curso;
+
+      console.log(`\n  📝 Procesando: ${NombreCurso} - ${NombreGrado} ${NombreSeccion}`);
+
+      // A) Marcar como inactiva la asignación de la unidad actual
+      const updateActual = `
+        UPDATE asignacion_docente
+        SET Activa = 0
+        WHERE IdCurso = ? AND IdUnidad = ? AND IdDocente = ?
+      `;
+      await sequelize.query(updateActual, {
+        replacements: [IdCurso, idUnidad, IdDocente],
+        type: QueryTypes.UPDATE,
+        transaction
+      });
+
+      console.log(`    ✅ Unidad ${numeroUnidadActual} cerrada para este curso`);
+
+      // B) Si existe siguiente unidad, crear o activar asignación
+      if (siguienteUnidad) {
+        // Verificar si ya existe asignación en la siguiente unidad
+        const existeAsignacionQuery = `
+          SELECT IdAsignacionDocente, Activa
+          FROM asignacion_docente
+          WHERE IdCurso = ? AND IdUnidad = ? AND IdDocente = ?
+        `;
+        const [asignacionExistente] = await sequelize.query(existeAsignacionQuery, {
+          replacements: [IdCurso, siguienteUnidad.IdUnidad, IdDocente],
+          type: QueryTypes.SELECT,
+          transaction
+        });
+
+        if (asignacionExistente) {
+          // Si ya existe, solo activarla
+          const activarSiguiente = `
+            UPDATE asignacion_docente
+            SET Activa = 1
+            WHERE IdAsignacionDocente = ?
+          `;
+          await sequelize.query(activarSiguiente, {
+            replacements: [asignacionExistente.IdAsignacionDocente],
+            type: QueryTypes.UPDATE,
+            transaction
+          });
+          console.log(`    ✅ Unidad ${numeroUnidadSiguiente} activada (ya existía)`);
+        } else {
+          // Si no existe, crearla
+          const crearSiguiente = `
+            INSERT INTO asignacion_docente (IdCurso, IdUnidad, IdDocente, Activa)
+            VALUES (?, ?, ?, 1)
+          `;
+          await sequelize.query(crearSiguiente, {
+            replacements: [IdCurso, siguienteUnidad.IdUnidad, IdDocente],
+            type: QueryTypes.INSERT,
+            transaction
+          });
+          console.log(`    ✅ Unidad ${numeroUnidadSiguiente} creada y activada`);
+        }
+      }
+
+      // C) Registrar curso actualizado
+      cursosActualizados.push({
+        IdCurso,
+        NombreCurso,
+        NombreGrado,
+        NombreSeccion,
+        NombreJornada,
+        IdDocente,
+        NombreDocente,
+        UnidadCerrada: numeroUnidadActual,
+        UnidadNuevaAbierta: siguienteUnidad ? numeroUnidadSiguiente : null
+      });
+    }
+
+    // 8. COMMIT DE LA TRANSACCIÓN
+    await transaction.commit();
+
+    console.log(`\n✅ Cierre parcial completado:`);
+    console.log(`   - Cursos cerrados: ${cursosActualizados.length}`);
+    console.log(`   - Cursos con pendientes: ${totalCursos - cursosActualizados.length}`);
+
+    // 9. RETORNAR RESULTADO
+    return res.json({
+      success: true,
+      data: {
+        IdUnidad: parseInt(idUnidad),
+        NumeroUnidad: numeroUnidadActual,
+        NombreUnidad: unidad.NombreUnidad,
+        totalCursosAnalizados: totalCursos,
+        cursosCerrados: cursosActualizados.length,
+        cursosConPendientes: totalCursos - cursosActualizados.length,
+        cursosActualizados,
+        observaciones: observaciones || null
+      },
+      message: siguienteUnidad
+        ? `${cursosActualizados.length} curso(s) cerrado(s) exitosamente. Unidad ${numeroUnidadSiguiente} abierta para esos cursos.`
+        : `${cursosActualizados.length} curso(s) cerrado(s) exitosamente (última unidad).`
+    });
+
+  } catch (error) {
+    await transaction.rollback();
+    console.error('❌ Error al cerrar cursos listos:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ==========================================
+// 8. ENDPOINTS QUE TRABAJAN CON NUMEROUNIDAD
+// ==========================================
+
+/**
+ * Obtener estado de todas las unidades con un número específico
+ * GET /api/cierre-unidades/estado-por-numero/:numeroUnidad
+ */
+exports.getEstadoPorNumeroUnidad = async (req, res) => {
+  try {
+    const { numeroUnidad } = req.params;
+
+    // Obtener estados de TODOS los cursos con ese número de unidad
+    const query = `
+      SELECT
+        e.IdEstado,
+        e.IdUnidad,
+        e.IdCurso,
+        c.Curso AS NombreCurso,
+        g.NombreGrado,
+        s.NombreSeccion,
+        j.NombreJornada,
+        e.IdDocente,
+        d.NombreDocente,
+        e.ActividadesSuman100,
+        e.PuntajeActual,
+        e.TotalEstudiantes,
+        e.EstudiantesCalificados,
+        e.PorcentajeCompletado,
+        e.EstadoGeneral,
+        e.DetallesPendientes,
+        e.UltimaActualizacion
+      FROM estado_cursos_unidad e
+      INNER JOIN unidades un ON e.IdUnidad = un.IdUnidad
+      INNER JOIN asignacion_docente ad ON un.IdAsignacionDocente = ad.IdAsignacionDocente
+      INNER JOIN cursos c ON e.IdCurso = c.idCurso
+      INNER JOIN grados g ON c.IdGrado = g.IdGrado
+      INNER JOIN secciones s ON ad.IdSeccion = s.IdSeccion
+      INNER JOIN jornadas j ON ad.IdJornada = j.IdJornada
+      INNER JOIN docentes d ON e.IdDocente = d.idDocente
+      WHERE un.NumeroUnidad = ? AND un.Estado = 1 AND un.Activa = 1
+      ORDER BY g.NombreGrado, s.NombreSeccion, c.Curso
+    `;
+
+    const estados = await sequelize.query(query, {
+      replacements: [numeroUnidad],
+      type: QueryTypes.SELECT
+    });
+
+    // Parsear JSON de DetallesPendientes y extraer problemas
+    const estadosProcesados = estados.map(estado => {
+      let detalles = null;
+      try {
+        if (estado.DetallesPendientes) {
+          detalles = typeof estado.DetallesPendientes === 'string'
+            ? JSON.parse(estado.DetallesPendientes)
+            : estado.DetallesPendientes;
+        }
+      } catch (error) {
+        console.error('Error parsing DetallesPendientes:', error.message);
+        detalles = null;
+      }
+
+      const problemas = [];
+      if (!estado.ActividadesSuman100) {
+        problemas.push(`Actividades suman ${estado.PuntajeActual} pts (deben sumar 100)`);
+      }
+      if (estado.PorcentajeCompletado < 100) {
+        const pendientes = estado.TotalEstudiantes - estado.EstudiantesCalificados;
+        problemas.push(`${pendientes} estudiante(s) sin calificar`);
+      }
+
+      return {
+        ...estado,
+        DetallesPendientes: detalles,
+        Problemas: problemas
+      };
+    });
+
+    // Calcular resumen
+    const resumen = {
+      totalCursos: estadosProcesados.length,
+      cursosListos: estadosProcesados.filter(e => e.EstadoGeneral === 'LISTO').length,
+      cursosPendientes: estadosProcesados.filter(e => e.EstadoGeneral === 'PENDIENTE').length,
+      cursosIncompletos: estadosProcesados.filter(e => e.EstadoGeneral === 'INCOMPLETO').length,
+      porcentajeCompletado: 0
+    };
+
+    if (resumen.totalCursos > 0) {
+      resumen.porcentajeCompletado = Math.round(
+        (resumen.cursosListos / resumen.totalCursos) * 100
+      );
+    }
+
+    res.json({
+      success: true,
+      data: {
+        numeroUnidad: parseInt(numeroUnidad),
+        cursos: estadosProcesados,
+        resumen
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error al obtener estado por número de unidad:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+/**
+ * Actualizar estado de todos los cursos con un número de unidad específico
+ * POST /api/cierre-unidades/actualizar-todos-por-numero/:numeroUnidad
+ */
+exports.actualizarTodosPorNumero = async (req, res) => {
+  try {
+    const { numeroUnidad } = req.params;
+
+    // Obtener todas las unidades con ese número
+    const unidades = await sequelize.query(`
+      SELECT IdUnidad FROM unidades WHERE NumeroUnidad = ? AND Estado = 1
+    `, {
+      replacements: [numeroUnidad],
+      type: QueryTypes.SELECT
+    });
+
+    let procesados = 0;
+    const errores = [];
+
+    for (const { IdUnidad } of unidades) {
+      // Obtener cursos de esta unidad
+      const cursos = await sequelize.query(`
+        SELECT DISTINCT
+          c.idCurso AS IdCurso,
+          u.IdUsuario AS IdDocente
+        FROM unidades un
+        INNER JOIN asignacion_docente ad ON un.IdAsignacionDocente = ad.IdAsignacionDocente
+        INNER JOIN cursos c ON ad.IdCurso = c.idCurso
+        INNER JOIN usuarios u ON ad.IdDocente = u.IdUsuario
+        WHERE un.IdUnidad = ?
+      `, {
+        replacements: [IdUnidad],
+        type: QueryTypes.SELECT
+      });
+
+      for (const curso of cursos) {
+        try {
+          const estadoCurso = await this.calcularEstadoCurso(IdUnidad, curso.IdCurso, curso.IdDocente);
+
+          await EstadoCursoUnidad.upsert({
+            IdUnidad,
+            IdCurso: curso.IdCurso,
+            IdDocente: curso.IdDocente,
+            ...estadoCurso,
+            UltimaActualizacion: new Date()
+          });
+
+          procesados++;
+        } catch (error) {
+          errores.push({ IdUnidad, IdCurso: curso.IdCurso, error: error.message });
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      procesados,
+      unidadesActualizadas: unidades.length,
+      errores: errores.length > 0 ? errores : undefined,
+      message: `${procesados} cursos actualizados en ${unidades.length} unidades`
+    });
+
+  } catch (error) {
+    console.error('❌ Error al actualizar estados por número:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+/**
+ * Cerrar cursos listos de todas las unidades con un número específico
+ * POST /api/cierre-unidades/cerrar-cursos-listos-por-numero/:numeroUnidad
+ */
+exports.cerrarCursosListosPorNumero = async (req, res) => {
+  console.log('\n🎯 INICIO cerrarCursosListosPorNumero - params:', req.params);
+  console.log('👤 Usuario:', req.usuario?.IdUsuario, 'Rol:', req.usuario?.rol);
+
+  const transaction = await sequelize.transaction();
+
+  try {
+    const { numeroUnidad } = req.params;
+    const observaciones = req.body?.observaciones || null;
+
+    console.log('📋 Datos recibidos - NumeroUnidad:', numeroUnidad, 'Observaciones:', observaciones);
+
+    // Validar permisos
+    if (req.usuario.rol !== 1) {
+      console.log('❌ ACCESO DENEGADO - Rol:', req.usuario.rol);
+      await transaction.rollback();
+      return res.status(403).json({
+        success: false,
+        error: 'Solo administradores pueden cerrar cursos'
+      });
+    }
+
+    const numeroUnidadActual = parseInt(numeroUnidad);
+    const numeroUnidadSiguiente = numeroUnidadActual + 1;
+
+    console.log(`\n🔍 Procesando cierre parcial de Unidad ${numeroUnidadActual}...`);
+
+    // Obtener todos los cursos LISTOS de todas las unidades con ese número
+    const cursosListosQuery = `
+      SELECT
+        e.IdUnidad,
+        e.IdCurso,
+        e.IdDocente,
+        c.Curso AS NombreCurso,
+        g.NombreGrado,
+        s.NombreSeccion,
+        j.NombreJornada,
+        d.NombreDocente,
+        ad.IdAsignacionDocente
+      FROM estado_cursos_unidad e
+      INNER JOIN unidades un ON e.IdUnidad = un.IdUnidad
+      INNER JOIN asignacion_docente ad ON un.IdAsignacionDocente = ad.IdAsignacionDocente
+      INNER JOIN cursos c ON e.IdCurso = c.idCurso
+      INNER JOIN grados g ON c.IdGrado = g.IdGrado
+      INNER JOIN secciones s ON ad.IdSeccion = s.IdSeccion
+      INNER JOIN jornadas j ON ad.IdJornada = j.IdJornada
+      INNER JOIN docentes d ON e.IdDocente = d.idDocente
+      WHERE un.NumeroUnidad = ? AND e.EstadoGeneral = 'LISTO' AND un.Estado = 1
+    `;
+
+    const cursosListos = await sequelize.query(cursosListosQuery, {
+      replacements: [numeroUnidadActual],
+      type: QueryTypes.SELECT,
+      transaction
+    });
+
+    console.log(`✅ Cursos listos para cerrar: ${cursosListos.length}`);
+
+    if (cursosListos.length === 0) {
+      await transaction.rollback();
+      return res.json({
+        success: true,
+        data: {
+          NumeroUnidad: numeroUnidadActual,
+          cursosCerrados: 0
+        },
+        message: 'No hay cursos listos para cerrar en esta unidad'
+      });
+    }
+
+    const cursosActualizados = [];
+
+    for (const curso of cursosListos) {
+      const { IdCurso, IdDocente, IdAsignacionDocente, NombreCurso, NombreGrado, NombreSeccion, NombreJornada, NombreDocente } = curso;
+
+      console.log(`\n  📝 Procesando: ${NombreCurso} - ${NombreGrado} ${NombreSeccion}`);
+
+      // Cerrar la unidad actual para esta asignación
+      await sequelize.query(`
+        UPDATE unidades
+        SET Activa = 0
+        WHERE IdAsignacionDocente = ? AND NumeroUnidad = ?
+      `, {
+        replacements: [IdAsignacionDocente, numeroUnidadActual],
+        type: QueryTypes.UPDATE,
+        transaction
+      });
+
+      console.log(`    ✅ Unidad ${numeroUnidadActual} cerrada`);
+
+      // Si existe siguiente unidad, activarla o crearla
+      if (numeroUnidadSiguiente <= 4) {
+        const [unidadSiguiente] = await sequelize.query(`
+          SELECT IdUnidad FROM unidades
+          WHERE IdAsignacionDocente = ? AND NumeroUnidad = ?
+        `, {
+          replacements: [IdAsignacionDocente, numeroUnidadSiguiente],
+          type: QueryTypes.SELECT,
+          transaction
+        });
+
+        if (unidadSiguiente) {
+          // Usar modelo para omitir trigger de validación
+          const Unidad = require('../models/Unidad');
+          await Unidad.update(
+            { Activa: 1 },
+            {
+              where: { IdUnidad: unidadSiguiente.IdUnidad },
+              transaction,
+              hooks: false // Omitir hooks que podrían validar
+            }
+          );
+          console.log(`    ✅ Unidad ${numeroUnidadSiguiente} activada`);
+        } else {
+          // Crear la siguiente unidad
+          await sequelize.query(`
+            INSERT INTO unidades (IdAsignacionDocente, NumeroUnidad, NombreUnidad, PunteoZona, PunteoFinal, Activa, Estado)
+            VALUES (?, ?, ?, 60.00, 40.00, 1, 1)
+          `, {
+            replacements: [IdAsignacionDocente, numeroUnidadSiguiente, `Unidad ${numeroUnidadSiguiente}`],
+            type: QueryTypes.INSERT,
+            transaction
+          });
+          console.log(`    ✅ Unidad ${numeroUnidadSiguiente} creada y activada`);
+        }
+      }
+
+      // Marcar notificaciones de este curso como RESUELTAS
+      await sequelize.query(`
+        UPDATE notificaciones_docentes
+        SET Estado = 'RESUELTA'
+        WHERE IdCurso = ? AND IdDocente = ? AND IdUnidad = ? AND Estado = 'PENDIENTE'
+      `, {
+        replacements: [IdCurso, IdDocente, curso.IdUnidad],
+        type: QueryTypes.UPDATE,
+        transaction
+      });
+
+      cursosActualizados.push({
+        IdCurso,
+        NombreCurso,
+        NombreGrado,
+        NombreSeccion,
+        NombreJornada,
+        IdDocente,
+        NombreDocente,
+        UnidadCerrada: numeroUnidadActual,
+        UnidadNuevaAbierta: numeroUnidadSiguiente <= 4 ? numeroUnidadSiguiente : null
+      });
+    }
+
+    await transaction.commit();
+
+    console.log(`\n✅ Cierre parcial completado: ${cursosActualizados.length} cursos cerrados`);
+
+    return res.json({
+      success: true,
+      data: {
+        NumeroUnidad: numeroUnidadActual,
+        cursosCerrados: cursosActualizados.length,
+        cursosActualizados,
+        observaciones: observaciones || null
+      },
+      message: numeroUnidadSiguiente <= 4
+        ? `${cursosActualizados.length} curso(s) cerrado(s) exitosamente. Unidad ${numeroUnidadSiguiente} abierta para esos cursos.`
+        : `${cursosActualizados.length} curso(s) cerrado(s) exitosamente (última unidad).`
+    });
+
+  } catch (error) {
+    await transaction.rollback();
+    console.error('❌ Error al cerrar cursos por número:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };

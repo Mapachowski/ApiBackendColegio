@@ -3,6 +3,7 @@ const Calificacion = require('../models/Calificacion');
 const Actividad = require('../models/Actividad');
 const Alumno = require('../models/Alumno');
 const Unidad = require('../models/Unidad');
+const cierreUnidadesController = require('./cierreUnidadesController');
 
 // Obtener una calificación por ID
 exports.getById = async (req, res) => {
@@ -172,6 +173,33 @@ exports.updateBatchActividad = async (req, res) => {
           error: error.message
         });
       }
+    }
+
+    // Recalcular estado del curso automáticamente
+    try {
+      const unidad = await Unidad.findByPk(actividad.IdUnidad);
+      if (unidad) {
+        // Obtener IdCurso e IdDocente de la unidad
+        const [asignacion] = await sequelize.query(`
+          SELECT IdCurso, IdDocente
+          FROM asignacion_docente
+          WHERE IdAsignacionDocente = :idAsignacion
+        `, {
+          replacements: { idAsignacion: unidad.IdAsignacionDocente },
+          type: sequelize.QueryTypes.SELECT
+        });
+
+        if (asignacion) {
+          await cierreUnidadesController.recalcularEstadoCursoSilencioso(
+            actividad.IdUnidad,
+            asignacion.IdCurso,
+            asignacion.IdDocente
+          );
+        }
+      }
+    } catch (error) {
+      console.error('⚠️ Error al recalcular estado (no crítico):', error.message);
+      // No lanzamos error porque las calificaciones ya se guardaron exitosamente
     }
 
     res.json({
