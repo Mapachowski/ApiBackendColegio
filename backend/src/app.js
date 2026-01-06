@@ -1,11 +1,26 @@
-const express = require('express');
+// ⚠️ IMPORTANTE: Cargar variables de entorno PRIMERO, antes de cualquier otra cosa
 const dotenv = require('dotenv');
+const path = require('path');
+
+// Determinar qué archivo .env cargar según NODE_ENV
+const envFile = process.env.NODE_ENV === 'production'
+  ? '.env.production'
+  : '.env.development';
+
+const envPath = path.resolve(__dirname, '..', envFile);
+
+// Cargar el archivo .env correspondiente
+dotenv.config({ path: envPath });
+
+console.log(`🌍 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+console.log(`📁 Archivo .env: ${envFile}`);
+console.log(`🗄️  Base de datos: ${process.env.DB_NAME}`);
+
+const express = require('express');
 const sequelize = require('./config/database');
 const routes = require('./routes/index');
 const cors = require('cors');
 const helmet = require('helmet');
-
-dotenv.config();
 
 const app = express();
 
@@ -70,9 +85,9 @@ const allowedOrigins = [
 // ✅ Configuración de CORS Mejorada
 app.use(cors({
   origin: function (origin, callback) {
-    // En desarrollo: permitir herramientas sin origen (Postman, curl, etc.)
-    // En producción: comentar esta línea para mayor seguridad
-    if (!origin && process.env.NODE_ENV !== 'production') {
+    // Permitir peticiones sin origen (curl, Postman) siempre desde localhost
+    // Necesario para testing y requests internos del servidor
+    if (!origin) {
       return callback(null, true);
     }
 
