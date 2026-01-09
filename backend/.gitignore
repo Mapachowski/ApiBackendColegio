@@ -5,10 +5,12 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Entornos
+# Entornos (NO subir credenciales a Git)
 .env
 .env.local
+.env.development
 .env.development.local
+.env.production
 .env.test.local
 .env.production.local
 

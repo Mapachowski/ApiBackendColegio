@@ -1,15 +1,10 @@
 // loginController.js
 const Usuario = require('../models/Usuario');
-const Alumno = require('../models/Alumno');
-const Docente = require('../models/Docente');
-const Rol = require('../models/Rol');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 const login = async (req, res) => {
   try {
-    console.log('Cuerpo recibido en login:', req.body);
-
     const { NombreUsuario, Contrasena, usuario, password } = req.body;
     const user = NombreUsuario || usuario;
     const pass = Contrasena || password;
@@ -61,51 +56,4 @@ const login = async (req, res) => {
   }
 };
 
-// Obtener perfil del usuario autenticado
-const getPerfil = async (req, res) => {
-  try {
-    const usuario = await Usuario.findByPk(req.usuario.id, {
-      include: [
-        {
-          model: Rol,
-          attributes: ['IdRol', 'NombreRol']
-        }
-      ],
-      attributes: ['IdUsuario', 'NombreUsuario', 'NombreCompleto', 'IdRol']
-    });
-
-    if (!usuario) {
-      return res.status(404).json({
-        success: false,
-        error: 'Usuario no encontrado'
-      });
-    }
-
-    // Buscar si es alumno
-    const alumno = await Alumno.findOne({
-      where: { IdUsuario: req.usuario.id },
-      attributes: ['IdAlumno', 'Matricula']
-    });
-
-    // Buscar si es docente
-    const docente = await Docente.findOne({
-      where: { idUsuario: req.usuario.id },
-      attributes: ['idDocente', 'NombreDocente']
-    });
-
-    const perfil = {
-      ...usuario.toJSON(),
-      IdAlumno: alumno ? alumno.IdAlumno : null,
-      Matricula: alumno ? alumno.Matricula : null,
-      IdDocente: docente ? docente.idDocente : null,
-      NombreDocente: docente ? docente.NombreDocente : null,
-    };
-
-    res.json({ success: true, data: perfil });
-  } catch (error) {
-    console.error('Error en getPerfil:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-};
-
-module.exports = { login, getPerfil };
+module.exports = { login };

@@ -5,10 +5,11 @@ exports.getSecciones = async (req, res) => {
   try {
     const secciones = await Seccion.findAll({
       where: { Estado: true },
+      order: [['NombreSeccion', 'ASC']]
     });
-    res.status(200).json(secciones);
+    res.status(200).json({ success: true, data: secciones });
   } catch (error) {
-    res.status(500).json({ message: 'Error al obtener secciones', error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 };
 

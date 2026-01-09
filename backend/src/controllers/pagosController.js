@@ -61,7 +61,7 @@ exports.getById = async (req, res) => {
 
       // ✅ SEGURO: Usar replacements con nombres para prevenir SQL injection
       const [results] = await sequelize.query(
-        'CALL sp_MesesPagados(:idAlumno, :tipoPago, :cicloEscolar)',
+        'CALL colegio.sp_MesesPagados(:idAlumno, :tipoPago, :cicloEscolar)',
         {
           replacements: {
             idAlumno: idAlumno,

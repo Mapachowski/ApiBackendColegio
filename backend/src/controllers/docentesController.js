@@ -62,34 +62,11 @@ exports.getAsignaciones = async (req, res) => {
 // Crear un nuevo docente
 exports.create = async (req, res) => {
   try {
-    const { CreadoPor, DPI, idUsuario, NombreDocente } = req.body;
-
-    // Validar campos obligatorios
+    const { CreadoPor } = req.body;
     if (!CreadoPor || CreadoPor.trim() === '') {
       return res.status(400).json({
         success: false,
         error: 'CreadoPor es requerido',
-      });
-    }
-
-    if (!DPI || DPI.trim() === '') {
-      return res.status(400).json({
-        success: false,
-        error: 'DPI es requerido',
-      });
-    }
-
-    if (!idUsuario || isNaN(idUsuario)) {
-      return res.status(400).json({
-        success: false,
-        error: 'idUsuario es requerido y debe ser un número',
-      });
-    }
-
-    if (!NombreDocente || NombreDocente.trim() === '') {
-      return res.status(400).json({
-        success: false,
-        error: 'NombreDocente es requerido',
       });
     }
 

@@ -61,6 +61,34 @@ const Unidad = sequelize.define('Unidad', {
     type: DataTypes.DATE,
     allowNull: true,
   },
+  // Campos de cierre de unidad
+  Cerrada: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    allowNull: false,
+    comment: 'Si la unidad está cerrada por el administrador',
+  },
+  FechaCierre: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    comment: 'Cuándo se cerró la unidad',
+  },
+  CerradaPorAdmin: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    comment: 'FK a usuarios (administrador que cerró)',
+  },
+  FechaLimiteCalificacion: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    comment: 'Fecha límite para que docentes completen calificaciones',
+  },
+  NotificacionesEnviadas: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    allowNull: false,
+    comment: 'Si ya se enviaron notificaciones a docentes',
+  },
 }, {
   tableName: 'unidades',
   timestamps: false,

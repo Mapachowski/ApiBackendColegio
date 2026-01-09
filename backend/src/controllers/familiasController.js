@@ -4,26 +4,8 @@ const sequelize = require('../config/database');
 // Obtener todas las familias
 exports.getAll = async (req, res) => {
   try {
-    const { sinUsuario } = req.query;
-
-    // Construir filtros dinámicos
-    const filtros = { Estado: true }; // Solo activos
-
-    // Filtro para familias sin usuario asignado
-    if (sinUsuario === 'true') {
-      filtros.IdUsuario = null;
-    }
-
-    const familias = await Familia.findAll({
-      where: filtros,
-      order: [['NombreFamilia', 'ASC']] // Ordenar alfabéticamente
-    });
-
-    res.json({
-      success: true,
-      data: familias,
-      total: familias.length
-    });
+    const familias = await Familia.findAll({ where: { Estado: true } }); // Solo activos
+    res.json({ success: true, data: familias });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

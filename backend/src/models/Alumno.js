@@ -81,4 +81,8 @@ const Alumno = sequelize.define('Alumnos', {
 Alumno.belongsTo(Familia, { foreignKey: 'IdFamilia' });
 Alumno.belongsTo(Usuario, { foreignKey: 'IdUsuario' });
 
+// Relación con Inscripciones (un alumno tiene muchas inscripciones)
+// NOTA: No podemos hacer el require aquí para evitar dependencia circular
+// La asociación se define en Inscripcion.js con belongsTo
+
 module.exports = Alumno;

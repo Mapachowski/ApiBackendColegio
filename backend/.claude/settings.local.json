@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir /b \"E:\\\\Colegio\")",
+      "Bash(dir /b \"E:\\\\Colegio\\\\ApiBackendColegio\")",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(node -c:*)",
+      "Bash(node:*)",
+      "Bash(npm start)",
+      "Bash(curl:*)",
+      "Bash(dir:*)",
+      "Bash(taskkill:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(git remote add:*)",
+      "Bash(git fetch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: Implementar sistema de actividades con validaciones flexibles\n\nSistema completo de gestión de actividades para unidades académicas con las siguientes características:\n\n## Funcionalidades Principales\n- Creación flexible de actividades \\(no requiere suma exacta al crear\\)\n- Validación de suma en tiempo real sin bloqueo\n- Bloqueo de calificación de examen final si zona incompleta\n- Restricción de modificación por fecha límite\n- Protección de PunteoMaximo si hay estudiantes calificados\n- Trigger MySQL para asignación automática de calificaciones\n\n## Archivos Modificados\n- actividadesController.js: Validaciones flexibles y endpoints batch\n- calificacionesController.js: Bloqueo de final si zona incompleta  \n- unidadesController.js: Endpoint de reporte para admin\n- unidadesRoutes.js: Nueva ruta de reporte\n- validarPropiedadActividad.js: Middleware de seguridad \\(nuevo\\)\n\n## Archivos Nuevos\n- trigger_asignar_actividad_estudiantes.sql: Trigger MySQL\n- INSTRUCCIONES_ACTIVIDADES.md: Documentación completa\n- RESUMEN_PARA_FRONTEND.md: Guía para frontend\n- validarPropiedadActividad.js: Middleware de seguridad\n\n## Reglas de Negocio\n- FechaActividad obligatoria en todas las actividades\n- Suma de actividades genera advertencia \\(no error\\)\n- Docente no puede calificar final si zona < 100%\n- No se puede modificar actividad después de fecha límite\n- No se puede cambiar punteo si hay calificaciones registradas\n- Admin tiene reporte de unidades incompletas\n\n🤖 Generated with Claude Code\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfix: Corregir middleware y controlador de actividades para CRUD completo\n\nCorrecciones críticas para permitir crear, modificar y eliminar actividades desde el frontend.\n\n## Problemas Resueltos\n\n### 1. Middleware validarPropiedadActividad\n- **POST /actividades**: Ahora valida por IdUnidad en body \\(no en params\\)\n- **PUT/DELETE /actividades/:id**: Usa query SQL directa para validación robusta\n- **Fix**: Manejo seguro de req.body con destructuring condicional \\(req.body || {}\\)\n\n### 2. Controlador DELETE\n- **Antes**: Requería ModificadoPor en body \\(causaba error 500\\)\n- **Ahora**: Obtiene usuario automáticamente de req.usuario \\(JWT token\\)\n- **Mejora**: Respuesta incluye datos de actividad eliminada\n\n## Cambios Técnicos\n\n**src/middleware/validarPropiedadActividad.js**:\n- CASO 1: Validar por IdUnidad en params \\(rutas /unidad/:idUnidad/batch\\)\n- CASO 2: POST - Validar por IdUnidad en body \\(crear actividad nueva\\)\n- CASO 3: PUT/DELETE - Query SQL directa con JOINs explícitos\n- Removido import de Actividad \\(no usado\\)\n\n**src/controllers/actividadesController.js**:\n- DELETE ahora usa req.usuario.email/nombre del token JWT\n- Eliminada validación de ModificadoPor en body\n- Agregado log de errores para debugging\n- Respuesta mejorada con datos de actividad\n\n## Validaciones de Seguridad Mantenidas\n✅ Docentes solo pueden CRUD sus propias actividades\n✅ Admin/Operador: acceso completo\n✅ Validación de propiedad por cadena: Usuario → Docente → AsignacionDocente → Unidad → Actividad\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: Sistema de cierre y reapertura de unidades con correcciones\n\nSistema completo de gestión de cierre de unidades con correcciones de errores.\n\n## Funcionalidades Principales\n- Validación de cierre \\(verificar calificaciones completas\\)\n- Cierre de unidad con cálculo automático de notas finales\n- Solicitudes de reapertura \\(docente → admin\\)\n- Aprobación/rechazo de solicitudes por admin\n- Protección de calificaciones en unidades cerradas\n- Redondeo matemático de notas finales a enteros\n- Contadores de alumnos calificados por actividad\n\n## Archivos Nuevos\n- SolicitudReapertura.js: Modelo de solicitudes\n- cierreUnidadController.js: Lógica de cierre y validación\n- solicitudesReaperturaController.js: Gestión de solicitudes\n- solicitudesReaperturaRoutes.js: Rutas de solicitudes\n- create_table_solicitudes_reapertura.sql: Script de BD\n\n## Archivos Modificados\n- actividadesController.js: Import Op + contadores AlumnosCalificados/TotalAlumnos\n- calificacionesController.js: Bloqueo de batch si unidad cerrada\n- notasUnidadController.js: Redondeo Math.round\\(\\) para NotaTotal\n- unidadesRoutes.js: Rutas de validar-cierre y cerrar\n- index.js: Registro de rutas de solicitudes\n- cierreUnidadController.js: Corrección de operadores Op.ne\n\n## Correcciones de Errores\n- Fix: Agregado import de Op en cierreUnidadController \\(5 lugares\\)\n- Fix: Agregado import de Op en actividadesController\n- Fix: Corregido sequelize.Op.not → Op.ne en todos los archivos\n- Fix: Campos AlumnosCalificados y TotalAlumnos en GET actividades\n\n## Reglas de Negocio\n- Sin límite de fechas para calificar actividades\n- Cierre requiere 100% de calificaciones completadas\n- Notas finales se redondean a enteros\n- Sistema de solicitudes docente → admin\n- Reapertura aprobada reactiva la unidad automáticamente\n- Nota de aprobación: >= 60 puntos\n\n🤖 Generated with Claude Code\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git merge:*)",
+      "Bash(git commit:*)",
+      "Bash(timeout /t 2 /nobreak)",
+      "Bash(timeout /t 5 /nobreak)",
+      "Bash(mysql:*)"
+    ]
+  }
+}

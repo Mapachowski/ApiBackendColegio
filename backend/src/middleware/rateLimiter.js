@@ -18,7 +18,7 @@ const rateLimit = require('express-rate-limit');
  */
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos en milisegundos
-  max: 100, // Máximo 100 peticiones por IP (TEMPORAL PARA DESARROLLO)
+  max: 5, // Máximo 5 peticiones por IP
 
   // Mensaje cuando se alcanza el límite
   message: {
@@ -33,6 +33,9 @@ const loginLimiter = rateLimit({
   // Headers estándar de rate limiting (informan al cliente)
   standardHeaders: true, // Agrega headers RateLimit-*
   legacyHeaders: false, // Desactiva headers X-RateLimit-* antiguos
+
+  // Identifica usuarios por IP (usa el default que maneja IPv6 correctamente)
+  // keyGenerator por defecto ya maneja IPv4 e IPv6
 
   // Función que se ejecuta cuando se alcanza el límite
   handler: (req, res) => {

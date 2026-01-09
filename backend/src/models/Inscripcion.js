@@ -59,4 +59,7 @@ Inscripcion.belongsTo(Seccion, { foreignKey: 'IdSeccion' });
 Inscripcion.belongsTo(Jornada, { foreignKey: 'IdJornada' });
 Inscripcion.belongsTo(Grado, { foreignKey: 'IdGrado' });
 
+// Relación inversa: Un alumno tiene muchas inscripciones
+Alumno.hasMany(Inscripcion, { foreignKey: 'IdAlumno' });
+
 module.exports = Inscripcion;

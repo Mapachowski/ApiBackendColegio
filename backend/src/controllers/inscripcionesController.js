@@ -83,7 +83,7 @@ exports.getByFilters = async (req, res) => {
 
     // ✅ SEGURO: Usar replacements para prevenir SQL injection
     const results = await sequelize.query(
-      'CALL sp_ListadoAlumnosPorInscripcion(:ciclo, :grado, :seccion, :jornada)',
+      'CALL colegio.sp_ListadoAlumnosPorInscripcion(:ciclo, :grado, :seccion, :jornada)',
       {
         replacements: {
           ciclo: p_CicloEscolar,

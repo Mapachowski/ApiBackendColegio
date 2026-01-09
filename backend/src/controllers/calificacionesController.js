@@ -2,6 +2,8 @@ const sequelize = require('../config/database');
 const Calificacion = require('../models/Calificacion');
 const Actividad = require('../models/Actividad');
 const Alumno = require('../models/Alumno');
+const Unidad = require('../models/Unidad');
+const cierreUnidadesController = require('./cierreUnidadesController');
 
 // Obtener una calificación por ID
 exports.getById = async (req, res) => {
@@ -92,18 +94,136 @@ exports.getPromedioAlumno = async (req, res) => {
   }
 };
 
+// Crear/actualizar calificaciones en batch para una actividad
+exports.updateBatchActividad = async (req, res) => {
+  try {
+    const { idActividad } = req.params;
+    const { calificaciones } = req.body;
+
+    // Obtener usuario del JWT
+    const ModificadoPor = req.usuario?.email || req.usuario?.nombre || 'Sistema';
+
+    if (!calificaciones || !Array.isArray(calificaciones) || calificaciones.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Se requiere un array de calificaciones',
+      });
+    }
+
+    // Verificar que la actividad existe
+    const actividad = await Actividad.findByPk(idActividad, {
+      include: [{ model: Unidad }]
+    });
+    if (!actividad) {
+      return res.status(404).json({
+        success: false,
+        error: 'Actividad no encontrada'
+      });
+    }
+
+    // ============================================
+    // VALIDACIÓN CRÍTICA: Verificar que la unidad esté activa
+    // ============================================
+    if (!actividad.Unidad || actividad.Unidad.Activa === 0) {
+      return res.status(403).json({
+        success: false,
+        error: 'No puedes modificar calificaciones de una unidad cerrada. Solicita reapertura al administrador.',
+        unidadCerrada: true
+      });
+    }
+
+    let creadas = 0;
+    let actualizadas = 0;
+    const errores = [];
+
+    for (const item of calificaciones) {
+      try {
+        const { IdAlumno, Punteo, Observaciones } = item;
+
+        // Buscar si ya existe la calificación
+        const [calificacionExistente] = await Calificacion.findOrCreate({
+          where: {
+            IdActividad: idActividad,
+            IdAlumno: IdAlumno
+          },
+          defaults: {
+            Punteo,
+            Observaciones,
+            CreadoPor: ModificadoPor,
+            FechaCreado: new Date()
+          }
+        });
+
+        if (calificacionExistente._options.isNewRecord) {
+          // Se creó una nueva calificación
+          creadas++;
+        } else {
+          // Actualizar calificación existente
+          await calificacionExistente.update({
+            Punteo,
+            Observaciones,
+            ModificadoPor,
+            FechaModificado: new Date()
+          });
+          actualizadas++;
+        }
+      } catch (error) {
+        errores.push({
+          IdAlumno: item.IdAlumno,
+          error: error.message
+        });
+      }
+    }
+
+    // Recalcular estado del curso automáticamente
+    try {
+      const unidad = await Unidad.findByPk(actividad.IdUnidad);
+      if (unidad) {
+        // Obtener IdCurso e IdDocente de la unidad
+        const [asignacion] = await sequelize.query(`
+          SELECT IdCurso, IdDocente
+          FROM asignacion_docente
+          WHERE IdAsignacionDocente = :idAsignacion
+        `, {
+          replacements: { idAsignacion: unidad.IdAsignacionDocente },
+          type: sequelize.QueryTypes.SELECT
+        });
+
+        if (asignacion) {
+          await cierreUnidadesController.recalcularEstadoCursoSilencioso(
+            actividad.IdUnidad,
+            asignacion.IdCurso,
+            asignacion.IdDocente
+          );
+        }
+      }
+    } catch (error) {
+      console.error('⚠️ Error al recalcular estado (no crítico):', error.message);
+      // No lanzamos error porque las calificaciones ya se guardaron exitosamente
+    }
+
+    res.json({
+      success: true,
+      creadas,
+      actualizadas,
+      total: creadas + actualizadas,
+      errores: errores.length > 0 ? errores : undefined,
+      message: `${creadas + actualizadas} calificaciones procesadas exitosamente`
+    });
+  } catch (error) {
+    console.error('❌ Error en batch de calificaciones:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 // Actualizar una calificación (ingresar punteo)
 exports.update = async (req, res) => {
   try {
     const { id } = req.params;
-    const { Punteo, Observaciones, ModificadoPor } = req.body;
+    const { Punteo, Observaciones } = req.body;
 
-    if (!ModificadoPor || ModificadoPor.trim() === '') {
-      return res.status(400).json({
-        success: false,
-        error: 'ModificadoPor es requerido',
-      });
-    }
+    // Obtener usuario del JWT
+    const ModificadoPor = req.usuario?.email || req.usuario?.nombre || 'Sistema';
 
     const calificacion = await Calificacion.findByPk(id, {
       include: [{ model: Actividad }],
@@ -111,6 +231,48 @@ exports.update = async (req, res) => {
 
     if (!calificacion) {
       return res.status(404).json({ success: false, error: 'Calificación no encontrada' });
+    }
+
+    // ============================================
+    // VALIDACIÓN CRÍTICA: Bloquear calificación de examen final si zona incompleta
+    // ============================================
+    if (calificacion.Actividad.TipoActividad === 'final' && Punteo !== null && Punteo !== undefined) {
+      // Obtener la unidad para conocer el punteo esperado de zona
+      const unidad = await Unidad.findByPk(calificacion.Actividad.IdUnidad);
+
+      if (!unidad) {
+        return res.status(404).json({ success: false, error: 'Unidad no encontrada' });
+      }
+
+      // Calcular suma de actividades de zona
+      const actividadesZona = await Actividad.findAll({
+        where: {
+          IdUnidad: calificacion.Actividad.IdUnidad,
+          TipoActividad: 'zona',
+          Estado: true,
+        },
+      });
+
+      const sumaZona = actividadesZona.reduce((total, act) => {
+        return total + parseFloat(act.PunteoMaximo);
+      }, 0);
+
+      const sumaZonaRedondeada = Math.round(sumaZona * 100) / 100;
+      const punteoZonaEsperado = parseFloat(unidad.PunteoZona);
+
+      // Si la zona NO suma 100%, BLOQUEAR la calificación del final
+      if (sumaZonaRedondeada !== punteoZonaEsperado) {
+        return res.status(403).json({
+          success: false,
+          error: 'No se puede calificar el examen final porque las actividades de ZONA no suman correctamente',
+          detalles: {
+            zonaActual: sumaZonaRedondeada,
+            zonaEsperada: punteoZonaEsperado,
+            diferencia: punteoZonaEsperado - sumaZonaRedondeada,
+            mensaje: `Falta configurar ${punteoZonaEsperado - sumaZonaRedondeada} puntos en actividades de zona`,
+          },
+        });
+      }
     }
 
     // Validar opcionalmente con el stored procedure
