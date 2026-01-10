@@ -211,3 +211,241 @@ exports.delete = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
+exports.getCursosActuales = async (req, res) => {
+  try {
+    const { id, anio } = req.params;
+
+    // Validar que el año sea un número de 4 dígitos
+    if (!anio || !/^\d{4}$/.test(anio)) {
+      return res.status(400).json({
+        success: false,
+        error: 'El año es requerido y debe ser un número de 4 dígitos (ejemplo: 2026)'
+      });
+    }
+
+    // Validar que el alumno existe
+    const alumno = await Alumno.findByPk(id);
+    if (!alumno) {
+      return res.status(404).json({
+        success: false,
+        error: 'Alumno no encontrado'
+      });
+    }
+
+    // Obtener inscripción del alumno
+    const [inscripciones] = await sequelize.query(
+      `SELECT IdInscripcion, IdGrado, IdSeccion, IdJornada, CicloEscolar
+       FROM inscripciones
+       WHERE IdAlumno = ? AND CicloEscolar = ? AND Estado = 1
+       LIMIT 1`,
+      { replacements: [id, anio] }
+    );
+
+    if (!inscripciones || inscripciones.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: `No se encontró inscripción activa para este alumno en el año ${anio}`
+      });
+    }
+
+    const inscripcion = inscripciones[0];
+
+    // Obtener cursos (asignaciones) del grado/sección/jornada con total de actividades
+    const [cursos] = await sequelize.query(
+      `SELECT
+        ad.IdAsignacionDocente,
+        ad.IdCurso,
+        c.Curso as NombreCurso,
+        c.NoOrden,
+        ad.IdDocente,
+        d.NombreDocente,
+        g.IdGrado,
+        g.NombreGrado,
+        s.IdSeccion,
+        s.NombreSeccion,
+        j.IdJornada,
+        j.NombreJornada,
+        ad.Anio,
+        (SELECT COUNT(*)
+         FROM unidades u
+         INNER JOIN actividades a ON u.IdUnidad = a.IdUnidad
+         WHERE u.IdAsignacionDocente = ad.IdAsignacionDocente
+           AND a.Estado = 1
+        ) as totalActividades
+      FROM asignacion_docente ad
+      INNER JOIN cursos c ON ad.IdCurso = c.idCurso
+      INNER JOIN docentes d ON ad.IdDocente = d.idDocente
+      INNER JOIN grados g ON ad.IdGrado = g.IdGrado
+      INNER JOIN secciones s ON ad.IdSeccion = s.IdSeccion
+      INNER JOIN jornadas j ON ad.IdJornada = j.IdJornada
+      WHERE ad.IdGrado = ?
+        AND ad.IdSeccion = ?
+        AND ad.IdJornada = ?
+        AND ad.Anio = ?
+        AND ad.Estado = 1
+      ORDER BY c.NoOrden`,
+      {
+        replacements: [
+          inscripcion.IdGrado,
+          inscripcion.IdSeccion,
+          inscripcion.IdJornada,
+          inscripcion.CicloEscolar
+        ]
+      }
+    );
+
+    res.json({ success: true, data: cursos });
+  } catch (error) {
+    console.error('Error en getCursosActuales:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+exports.getInscripcionActual = async (req, res) => {
+  try {
+    const { id, anio } = req.params;
+
+    // Validar que el año sea un número de 4 dígitos
+    if (!anio || !/^\d{4}$/.test(anio)) {
+      return res.status(400).json({
+        success: false,
+        error: 'El año es requerido y debe ser un número de 4 dígitos (ejemplo: 2026)'
+      });
+    }
+
+    const [inscripciones] = await sequelize.query(
+      `SELECT
+        i.IdInscripcion,
+        i.IdAlumno,
+        a.Matricula,
+        CONCAT(a.Nombres, ' ', a.Apellidos) as NombreCompleto,
+        i.IdGrado,
+        g.NombreGrado,
+        i.IdSeccion,
+        s.NombreSeccion,
+        i.IdJornada,
+        j.NombreJornada,
+        i.CicloEscolar,
+        i.Estado
+      FROM inscripciones i
+      INNER JOIN alumnos a ON i.IdAlumno = a.IdAlumno
+      INNER JOIN grados g ON i.IdGrado = g.IdGrado
+      INNER JOIN secciones s ON i.IdSeccion = s.IdSeccion
+      INNER JOIN jornadas j ON i.IdJornada = j.IdJornada
+      WHERE i.IdAlumno = ?
+        AND i.CicloEscolar = ?
+        AND i.Estado = 1
+      LIMIT 1`,
+      { replacements: [id, anio] }
+    );
+
+    if (!inscripciones || inscripciones.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: `No se encontró inscripción activa para el alumno en el año ${anio}`
+      });
+    }
+
+    res.json({ success: true, data: inscripciones[0] });
+  } catch (error) {
+    console.error('Error en getInscripcionActual:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// Obtener todas las actividades del alumno (todas las materias) para calendario
+exports.getTodasActividadesAlumno = async (req, res) => {
+  try {
+    const { id, anio } = req.params;
+
+    // Validar que el año sea un número de 4 dígitos
+    if (!anio || !/^\d{4}$/.test(anio)) {
+      return res.status(400).json({
+        success: false,
+        error: 'El año es requerido y debe ser un número de 4 dígitos (ejemplo: 2026)'
+      });
+    }
+
+    // Validar que el alumno existe
+    const alumno = await Alumno.findByPk(id);
+    if (!alumno) {
+      return res.status(404).json({
+        success: false,
+        error: 'Alumno no encontrado'
+      });
+    }
+
+    // Obtener inscripción del alumno
+    const [inscripciones] = await sequelize.query(
+      `SELECT IdInscripcion, IdGrado, IdSeccion, IdJornada, CicloEscolar
+       FROM inscripciones
+       WHERE IdAlumno = ? AND CicloEscolar = ? AND Estado = 1
+       LIMIT 1`,
+      { replacements: [id, anio] }
+    );
+
+    if (!inscripciones || inscripciones.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: `No se encontró inscripción activa para este alumno en el año ${anio}`
+      });
+    }
+
+    const inscripcion = inscripciones[0];
+
+    // Obtener TODAS las actividades del alumno de TODOS sus cursos
+    const [actividades] = await sequelize.query(
+      `SELECT
+        a.IdActividad,
+        a.NombreActividad,
+        a.Descripcion,
+        a.PunteoMaximo,
+        a.TipoActividad,
+        a.FechaActividad,
+        a.FechaCreado,
+        c.Curso as NombreCurso,
+        c.NoOrden,
+        u.IdUnidad,
+        u.NumeroUnidad,
+        u.NombreUnidad,
+        u.Activa as UnidadActiva,
+        ad.IdAsignacionDocente,
+        d.NombreDocente,
+        cal.IdCalificacion,
+        cal.Punteo,
+        cal.Observaciones
+      FROM asignacion_docente ad
+      INNER JOIN cursos c ON ad.IdCurso = c.idCurso
+      INNER JOIN docentes d ON ad.IdDocente = d.idDocente
+      INNER JOIN unidades u ON ad.IdAsignacionDocente = u.IdAsignacionDocente
+      INNER JOIN actividades a ON u.IdUnidad = a.IdUnidad
+      LEFT JOIN calificaciones cal ON a.IdActividad = cal.IdActividad AND cal.IdAlumno = ?
+      WHERE ad.IdGrado = ?
+        AND ad.IdSeccion = ?
+        AND ad.IdJornada = ?
+        AND ad.Anio = ?
+        AND ad.Estado = 1
+        AND a.Estado = 1
+      ORDER BY a.FechaActividad ASC, c.NoOrden, u.NumeroUnidad`,
+      {
+        replacements: [
+          id,
+          inscripcion.IdGrado,
+          inscripcion.IdSeccion,
+          inscripcion.IdJornada,
+          inscripcion.CicloEscolar
+        ]
+      }
+    );
+
+    res.json({
+      success: true,
+      data: actividades,
+      total: actividades.length
+    });
+  } catch (error) {
+    console.error('Error en getTodasActividadesAlumno:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
