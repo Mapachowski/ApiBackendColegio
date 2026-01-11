@@ -2,6 +2,7 @@
 const Usuario = require('../models/Usuario');
 const Alumno = require('../models/Alumno');
 const Docente = require('../models/Docente');
+const Familia = require('../models/Familia');
 const Rol = require('../models/Rol');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -93,12 +94,20 @@ const getPerfil = async (req, res) => {
       attributes: ['idDocente', 'NombreDocente']
     });
 
+    // Buscar si es familia
+    const familia = await Familia.findOne({
+      where: { IdUsuario: req.usuario.id },
+      attributes: ['IdFamilia', 'NombreFamilia']
+    });
+
     const perfil = {
       ...usuario.toJSON(),
       IdAlumno: alumno ? alumno.IdAlumno : null,
       Matricula: alumno ? alumno.Matricula : null,
       IdDocente: docente ? docente.idDocente : null,
       NombreDocente: docente ? docente.NombreDocente : null,
+      IdFamilia: familia ? familia.IdFamilia : null,
+      NombreFamilia: familia ? familia.NombreFamilia : null,
     };
 
     res.json({ success: true, data: perfil });

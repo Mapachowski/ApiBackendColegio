@@ -6,6 +6,8 @@ const asignacionesController = require('../controllers/asignacionesController');
 router.get('/validar', asignacionesController.validar);
 router.get('/cursos-disponibles', asignacionesController.getCursosDisponibles);
 router.get('/:id/unidades', asignacionesController.getUnidades);
+router.get('/:id/actividades-alumno', asignacionesController.getActividadesConCalificaciones);
+
 
 // Rutas generales
 router.get('/', asignacionesController.getAll);
