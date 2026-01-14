@@ -18,26 +18,36 @@ async function generarNotificacionesInterno(idUnidad, fechaLimiteCustom = null, 
       return { success: false, error: 'Unidad no encontrada' };
     }
 
-    // Obtener estados de cursos que NO están listos
+    // Obtener TODOS los cursos de la unidad y su estado (si existe)
+    // LEFT JOIN para incluir cursos sin estado calculado (sin actividades configuradas)
     const [cursosConPendientes] = await sequelize.query(`
       SELECT
-        e.IdCurso,
-        e.IdDocente,
+        c.idCurso AS IdCurso,
+        d.idDocente AS IdDocente,
         c.Curso AS NombreCurso,
         d.NombreDocente,
-        e.ActividadesSuman100,
-        e.PuntajeActual,
-        e.TotalEstudiantes,
-        e.EstudiantesCalificados,
-        e.PorcentajeCompletado,
-        e.EstadoGeneral,
-        e.DetallesPendientes
-      FROM estado_cursos_unidad e
-      INNER JOIN cursos c ON e.IdCurso = c.idCurso
-      INNER JOIN docentes d ON e.IdDocente = d.idDocente
-      WHERE e.IdUnidad = :idUnidad
-        AND e.EstadoGeneral != 'LISTO'
-      ORDER BY e.EstadoGeneral DESC, e.PorcentajeCompletado ASC
+        COALESCE(e.ActividadesSuman100, 0) AS ActividadesSuman100,
+        COALESCE(e.PuntajeActual, 0) AS PuntajeActual,
+        COALESCE(e.TotalEstudiantes, 0) AS TotalEstudiantes,
+        COALESCE(e.EstudiantesCalificados, 0) AS EstudiantesCalificados,
+        COALESCE(e.PorcentajeCompletado, 0) AS PorcentajeCompletado,
+        COALESCE(e.EstadoGeneral, 'PENDIENTE') AS EstadoGeneral,
+        e.DetallesPendientes,
+        g.NombreGrado,
+        s.NombreSeccion,
+        j.NombreJornada
+      FROM unidades u
+      INNER JOIN asignacion_docente ad ON u.IdAsignacionDocente = ad.IdAsignacionDocente
+      INNER JOIN cursos c ON ad.IdCurso = c.idCurso
+      INNER JOIN docentes d ON ad.IdDocente = d.idDocente
+      INNER JOIN grados g ON ad.IdGrado = g.IdGrado
+      INNER JOIN secciones s ON ad.IdSeccion = s.IdSeccion
+      INNER JOIN jornadas j ON ad.IdJornada = j.IdJornada
+      LEFT JOIN estado_cursos_unidad e ON e.IdUnidad = u.IdUnidad AND e.IdCurso = c.idCurso
+      WHERE u.IdUnidad = :idUnidad
+        AND u.Estado = 1
+        AND (e.EstadoGeneral IS NULL OR e.EstadoGeneral != 'LISTO')
+      ORDER BY COALESCE(e.EstadoGeneral, 'ZZPENDIENTE') DESC, COALESCE(e.PorcentajeCompletado, 0) ASC
     `, {
       replacements: { idUnidad },
       transaction: usarTransaction
@@ -56,10 +66,29 @@ async function generarNotificacionesInterno(idUnidad, fechaLimiteCustom = null, 
         ? JSON.parse(curso.DetallesPendientes)
         : null;
 
-      // Notificación por actividades incompletas
-      if (!curso.ActividadesSuman100) {
-        const faltante = detalles?.actividades?.faltante || 0;
-        const mensaje = `Tus actividades en "${curso.NombreCurso}" suman ${curso.PuntajeActual} puntos. Deben sumar exactamente 100 puntos. Faltan ${faltante} puntos.`;
+      // Si el curso NO tiene actividades configuradas (PuntajeActual = 0 y EstadoGeneral = 'PENDIENTE')
+      // Enviar notificación genérica para configurar
+      if (curso.PuntajeActual === 0 && curso.EstadoGeneral === 'PENDIENTE') {
+        const mensaje = `El curso "${curso.NombreCurso}" (${curso.NombreGrado} ${curso.NombreSeccion} - ${curso.NombreJornada}) no tiene actividades configuradas. Por favor configura las actividades de zona y examen final (deben sumar 100 puntos) y califica a todos los estudiantes antes de la fecha límite.`;
+
+        await NotificacionDocente.create({
+          IdDocente: curso.IdDocente,
+          IdCurso: curso.IdCurso,
+          IdUnidad: idUnidad,
+          TipoNotificacion: 'CURSO_SIN_CONFIGURAR',
+          Mensaje: mensaje,
+          FechaLimite: fechaLimite,
+          Leida: false
+        }, { transaction: usarTransaction });
+
+        notificacionesCreadas++;
+        continue; // Saltar las demás verificaciones para este curso
+      }
+
+      // Notificación por actividades incompletas (suman menos de 100)
+      if (!curso.ActividadesSuman100 && curso.PuntajeActual > 0) {
+        const faltante = detalles?.actividades?.faltante || (100 - curso.PuntajeActual);
+        const mensaje = `Tus actividades en "${curso.NombreCurso}" (${curso.NombreGrado} ${curso.NombreSeccion}) suman ${curso.PuntajeActual} puntos. Deben sumar exactamente 100 puntos. Faltan ${faltante} puntos.`;
 
         await NotificacionDocente.create({
           IdDocente: curso.IdDocente,
@@ -74,10 +103,10 @@ async function generarNotificacionesInterno(idUnidad, fechaLimiteCustom = null, 
         notificacionesCreadas++;
       }
 
-      // Notificación por calificaciones pendientes
-      if (curso.PorcentajeCompletado < 100) {
+      // Notificación por calificaciones pendientes (actividades suman 100 pero faltan calificar)
+      if (curso.ActividadesSuman100 && curso.PorcentajeCompletado < 100) {
         const estudiantesPendientes = curso.TotalEstudiantes - curso.EstudiantesCalificados;
-        const mensaje = `Tienes ${estudiantesPendientes} estudiante(s) sin calificar en "${curso.NombreCurso}". Por favor completa las calificaciones antes de la fecha límite.`;
+        const mensaje = `Tienes ${estudiantesPendientes} estudiante(s) sin calificar en "${curso.NombreCurso}" (${curso.NombreGrado} ${curso.NombreSeccion}). Por favor completa las calificaciones antes de la fecha límite.`;
 
         await NotificacionDocente.create({
           IdDocente: curso.IdDocente,
