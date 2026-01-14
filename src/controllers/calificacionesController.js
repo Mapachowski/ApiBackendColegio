@@ -174,8 +174,56 @@ exports.updateBatchActividad = async (req, res) => {
       }
     }
 
-    // OPTIMIZACIÓN: El recálculo de estado se hace SOLO al cerrar la unidad
-    // NO se recalcula aquí para mejorar performance (de 30s a <3s)
+    // ============================================
+    // RECÁLCULO INTELIGENTE: Solo si actividades suman 100 puntos
+    // ============================================
+    try {
+      // Verificar si las actividades de esta unidad suman 100 puntos
+      const [resultadoSuma] = await sequelize.query(`
+        SELECT COALESCE(SUM(PuntajeMax), 0) AS PuntajeTotal
+        FROM actividades
+        WHERE IdUnidad = :idUnidad
+          AND Estado = 1
+      `, {
+        replacements: { idUnidad: actividad.IdUnidad },
+        type: sequelize.QueryTypes.SELECT
+      });
+
+      const puntajeTotal = parseFloat(resultadoSuma?.PuntajeTotal || 0);
+
+      // Solo recalcular si suma exactamente 100 (optimización para evitar cálculos innecesarios)
+      if (puntajeTotal === 100) {
+        console.log(`🔄 Actividades suman 100 pts → recalculando estado del curso...`);
+
+        // Obtener datos del curso y docente de la unidad
+        const unidad = await Unidad.findByPk(actividad.IdUnidad);
+        if (unidad) {
+          const [asignacion] = await sequelize.query(`
+            SELECT IdCurso, IdDocente
+            FROM asignacion_docente
+            WHERE IdAsignacionDocente = ?
+          `, {
+            replacements: [unidad.IdAsignacionDocente],
+            type: sequelize.QueryTypes.SELECT
+          });
+
+          if (asignacion) {
+            const cierreUnidadesController = require('./cierreUnidadesController');
+            await cierreUnidadesController.recalcularEstadoCursoSilencioso(
+              actividad.IdUnidad,
+              asignacion.IdCurso,
+              asignacion.IdDocente
+            );
+            console.log(`✅ Estado del curso recalculado automáticamente`);
+          }
+        }
+      } else {
+        console.log(`ℹ️  Actividades suman ${puntajeTotal} pts → recálculo pospuesto hasta que sumen 100`);
+      }
+    } catch (error) {
+      // Error no crítico - no bloquear guardado de calificaciones
+      console.error('⚠️ Error al recalcular estado (no crítico):', error.message);
+    }
 
     res.json({
       success: true,
