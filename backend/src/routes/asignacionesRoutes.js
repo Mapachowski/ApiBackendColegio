@@ -6,7 +6,9 @@ const asignacionesController = require('../controllers/asignacionesController');
 router.get('/validar', asignacionesController.validar);
 router.get('/cursos-disponibles', asignacionesController.getCursosDisponibles);
 router.get('/:id/unidades', asignacionesController.getUnidades);
-router.get('/:id/actividades-alumno', asignacionesController.getActividadesConCalificaciones);
+router.get('/:id/actividades', asignacionesController.getActividades); // Solo actividades (sin calificaciones) - para admin
+router.get('/:id/actividades-alumno', asignacionesController.getActividadesConCalificaciones); // Con calificaciones de un alumno
+
 
 
 // Rutas generales

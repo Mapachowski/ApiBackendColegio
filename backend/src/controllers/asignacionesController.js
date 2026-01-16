@@ -331,3 +331,114 @@ exports.getActividadesConCalificaciones = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
+// Obtener todas las actividades de una asignación (sin calificaciones)
+// Para uso de administradores - solo necesita IdAsignacionDocente
+exports.getActividades = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Validar que la asignación existe
+    const asignacion = await AsignacionDocente.findByPk(id);
+    if (!asignacion) {
+      return res.status(404).json({
+        success: false,
+        error: 'Asignación no encontrada'
+      });
+    }
+
+    // Obtener información de la asignación
+    const [infoAsignacion] = await sequelize.query(
+      `SELECT
+        ad.IdAsignacionDocente,
+        c.IdCurso,
+        c.Curso AS NombreCurso,
+        d.idDocente AS IdDocente,
+        d.NombreDocente,
+        g.IdGrado,
+        g.NombreGrado,
+        s.IdSeccion,
+        s.NombreSeccion,
+        j.IdJornada,
+        j.NombreJornada,
+        ad.Anio AS CicloEscolar
+      FROM asignacion_docente ad
+      INNER JOIN cursos c ON ad.IdCurso = c.IdCurso
+      INNER JOIN docentes d ON ad.IdDocente = d.idDocente
+      INNER JOIN grados g ON ad.IdGrado = g.IdGrado
+      INNER JOIN secciones s ON ad.IdSeccion = s.IdSeccion
+      INNER JOIN jornadas j ON ad.IdJornada = j.IdJornada
+      WHERE ad.IdAsignacionDocente = ?`,
+      { replacements: [id] }
+    );
+
+    // Obtener actividades organizadas por unidad
+    const [actividades] = await sequelize.query(
+      `SELECT
+        a.IdActividad,
+        a.NombreActividad,
+        a.Descripcion,
+        a.PunteoMaximo,
+        a.TipoActividad,
+        a.FechaActividad,
+        a.FechaCreado,
+        a.Estado AS EstadoActividad,
+        u.IdUnidad,
+        u.NumeroUnidad,
+        u.NombreUnidad,
+        u.PunteoZona,
+        u.PunteoFinal,
+        u.Activa AS UnidadActiva
+      FROM actividades a
+      INNER JOIN unidades u ON a.IdUnidad = u.IdUnidad
+      WHERE u.IdAsignacionDocente = ?
+        AND a.Estado = 1
+      ORDER BY u.NumeroUnidad, a.TipoActividad, a.FechaActividad`,
+      { replacements: [id] }
+    );
+
+    // Organizar actividades por unidad
+    const unidadesMap = {};
+
+    actividades.forEach(act => {
+      const unidadId = act.IdUnidad;
+
+      if (!unidadesMap[unidadId]) {
+        unidadesMap[unidadId] = {
+          IdUnidad: act.IdUnidad,
+          NumeroUnidad: act.NumeroUnidad,
+          NombreUnidad: act.NombreUnidad,
+          PunteoZona: act.PunteoZona,
+          PunteoFinal: act.PunteoFinal,
+          UnidadActiva: act.UnidadActiva,
+          actividades: []
+        };
+      }
+
+      unidadesMap[unidadId].actividades.push({
+        IdActividad: act.IdActividad,
+        NombreActividad: act.NombreActividad,
+        Descripcion: act.Descripcion,
+        PunteoMaximo: act.PunteoMaximo,
+        TipoActividad: act.TipoActividad,
+        FechaActividad: act.FechaActividad,
+        FechaCreado: act.FechaCreado,
+        EstadoActividad: act.EstadoActividad
+      });
+    });
+
+    const unidades = Object.values(unidadesMap);
+
+    res.json({
+      success: true,
+      data: {
+        asignacion: infoAsignacion[0] || null,
+        unidades,
+        totalActividades: actividades.length
+      }
+    });
+  } catch (error) {
+    console.error('Error en getActividades:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
