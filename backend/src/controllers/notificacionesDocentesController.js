@@ -381,6 +381,199 @@ exports.contadorNoLeidas = async (req, res) => {
 };
 
 /**
+ * Obtener notificaciones pendientes de un docente específico
+ * GET /api/notificaciones-docentes/pendientes/:idDocente
+ */
+exports.pendientesPorDocente = async (req, res) => {
+  try {
+    const { idDocente } = req.params;
+
+    const [notificaciones] = await sequelize.query(`
+      SELECT
+        n.IdNotificacion,
+        n.TipoNotificacion,
+        n.Mensaje,
+        n.FechaLimite,
+        n.Leida,
+        n.Estado,
+        n.FechaCreacion,
+        c.Curso AS NombreCurso,
+        g.NombreGrado,
+        s.NombreSeccion,
+        j.NombreJornada,
+        u.NumeroUnidad,
+        u.NombreUnidad
+      FROM notificaciones_docentes n
+      INNER JOIN cursos c ON n.IdCurso = c.idCurso
+      INNER JOIN unidades u ON n.IdUnidad = u.IdUnidad
+      INNER JOIN asignacion_docente ad ON u.IdAsignacionDocente = ad.idAsignacionDocente
+      INNER JOIN grados g ON ad.idGrado = g.IdGrado
+      INNER JOIN secciones s ON ad.idSeccion = s.IdSeccion
+      INNER JOIN jornadas j ON ad.idJornada = j.IdJornada
+      WHERE n.IdDocente = :idDocente
+        AND n.Estado = 'PENDIENTE'
+        AND n.Leida = 0
+      ORDER BY n.FechaLimite ASC
+    `, {
+      replacements: { idDocente }
+    });
+
+    res.json({
+      success: true,
+      notificaciones: notificaciones
+    });
+
+  } catch (error) {
+    console.error('❌ Error al obtener notificaciones pendientes:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+/**
+ * Generar notificaciones para docentes con pendientes (por NumeroUnidad)
+ * POST /api/notificaciones-docentes/generar-por-numero/:numeroUnidad
+ */
+exports.generarPorNumero = async (req, res) => {
+  console.log('\n🔔 INICIO generarPorNumero - params:', req.params);
+
+  const transaction = await sequelize.transaction();
+
+  try {
+    const { numeroUnidad } = req.params;
+    const DiasLimite = req.body?.DiasLimite || 3; // Por defecto 3 días
+
+    console.log('📋 NumeroUnidad:', numeroUnidad, 'DiasLimite:', DiasLimite);
+
+    // Calcular fecha límite (3 días desde hoy por defecto)
+    const fechaLimite = new Date();
+    fechaLimite.setDate(fechaLimite.getDate() + DiasLimite);
+
+    console.log('📅 Fecha límite calculada:', fechaLimite);
+
+    // Obtener estados de cursos que NO están listos en todas las unidades con ese número
+    const [cursosConPendientes] = await sequelize.query(`
+      SELECT
+        e.IdUnidad,
+        e.IdCurso,
+        e.IdDocente,
+        c.Curso AS NombreCurso,
+        d.NombreDocente,
+        g.NombreGrado,
+        s.NombreSeccion,
+        e.ActividadesSuman100,
+        e.PuntajeActual,
+        e.TotalEstudiantes,
+        e.EstudiantesCalificados,
+        e.PorcentajeCompletado,
+        e.EstadoGeneral,
+        e.DetallesPendientes
+      FROM estado_cursos_unidad e
+      INNER JOIN unidades un ON e.IdUnidad = un.IdUnidad
+      INNER JOIN asignacion_docente ad ON un.IdAsignacionDocente = ad.idAsignacionDocente
+      INNER JOIN cursos c ON e.IdCurso = c.idCurso
+      INNER JOIN grados g ON c.idGrado = g.IdGrado
+      INNER JOIN secciones s ON ad.idSeccion = s.IdSeccion
+      INNER JOIN docentes d ON e.IdDocente = d.idDocente
+      WHERE un.NumeroUnidad = :numeroUnidad
+        AND un.Estado = 1
+        AND e.EstadoGeneral != 'LISTO'
+      ORDER BY e.EstadoGeneral DESC, e.PorcentajeCompletado ASC
+    `, {
+      replacements: { numeroUnidad },
+      transaction
+    });
+
+    console.log('📊 Cursos con pendientes encontrados:', cursosConPendientes.length);
+
+    if (cursosConPendientes.length === 0) {
+      console.log('⚠️ No hay cursos con pendientes');
+      await transaction.rollback();
+      return res.json({
+        success: true,
+        message: 'No hay cursos con pendientes. Todos los cursos están listos.',
+        notificacionesCreadas: 0
+      });
+    }
+
+    let notificacionesCreadas = 0;
+
+    for (const curso of cursosConPendientes) {
+      console.log(`  📝 Procesando: Curso ${curso.IdCurso}, Docente ${curso.IdDocente}, Unidad ${curso.IdUnidad}`);
+      // Determinar tipo de notificación según el problema
+      let tipoNotificacion = 'CALIFICACIONES_PENDIENTES';
+      let mensaje = '';
+
+      if (!curso.ActividadesSuman100) {
+        tipoNotificacion = 'ACTIVIDADES_INCOMPLETAS';
+        const faltante = (100 - parseFloat(curso.PuntajeActual)).toFixed(2);
+        mensaje = `Tus actividades en "${curso.NombreCurso}" (${curso.NombreGrado} ${curso.NombreSeccion}) suman ${curso.PuntajeActual} puntos. Deben sumar exactamente 100 puntos. Faltan ${faltante} puntos.`;
+      } else if (curso.PorcentajeCompletado < 100) {
+        const estudiantesPendientes = curso.TotalEstudiantes - curso.EstudiantesCalificados;
+        mensaje = `Tienes ${estudiantesPendientes} estudiante(s) sin calificar en "${curso.NombreCurso}" (${curso.NombreGrado} ${curso.NombreSeccion}). Por favor completa las calificaciones antes de la fecha límite.`;
+      } else {
+        tipoNotificacion = 'CURSO_SIN_CONFIGURAR';
+        mensaje = `El curso "${curso.NombreCurso}" (${curso.NombreGrado} ${curso.NombreSeccion}) tiene pendientes que debes revisar.`;
+      }
+
+      // Verificar si ya existe una notificación similar pendiente
+      const [existente] = await sequelize.query(`
+        SELECT IdNotificacion
+        FROM notificaciones_docentes
+        WHERE IdDocente = :idDocente
+          AND IdCurso = :idCurso
+          AND IdUnidad = :idUnidad
+          AND Estado = 'PENDIENTE'
+        LIMIT 1
+      `, {
+        replacements: {
+          idDocente: curso.IdDocente,
+          idCurso: curso.IdCurso,
+          idUnidad: curso.IdUnidad
+        },
+        transaction
+      });
+
+      if (existente.length === 0) {
+        // Crear nueva notificación
+        await sequelize.query(`
+          INSERT INTO notificaciones_docentes
+            (IdDocente, IdCurso, IdUnidad, TipoNotificacion, Mensaje, FechaLimite, Leida, Estado, FechaCreacion)
+          VALUES
+            (:idDocente, :idCurso, :idUnidad, :tipoNotificacion, :mensaje, :fechaLimite, 0, 'PENDIENTE', NOW())
+        `, {
+          replacements: {
+            idDocente: curso.IdDocente,
+            idCurso: curso.IdCurso,
+            idUnidad: curso.IdUnidad,
+            tipoNotificacion,
+            mensaje,
+            fechaLimite
+          },
+          transaction
+        });
+
+        notificacionesCreadas++;
+      }
+    }
+
+    await transaction.commit();
+
+    res.json({
+      success: true,
+      notificacionesCreadas,
+      cursosConPendientes: cursosConPendientes.length,
+      fechaLimite,
+      message: `${notificacionesCreadas} notificaciones creadas para ${cursosConPendientes.length} curso(s) con pendientes`
+    });
+
+  } catch (error) {
+    await transaction.rollback();
+    console.error('❌ Error al generar notificaciones por número:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+/**
  * Eliminar notificaciones antiguas (opcional - limpieza)
  * DELETE /api/notificaciones-docentes/limpiar
  */

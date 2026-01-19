@@ -7,11 +7,18 @@ const authMiddleware = require('../middleware/authMiddleware');
 router.use(authMiddleware);
 
 /**
- * Generar notificaciones para docentes con pendientes
+ * Generar notificaciones para docentes con pendientes (por IdUnidad)
  * POST /generar/:idUnidad
  * Body (opcional): { FechaLimite: "2026-01-05T23:59:59" }
  */
 router.post('/generar/:idUnidad', notificacionesDocentesController.generarNotificaciones);
+
+/**
+ * Generar notificaciones para docentes con pendientes (por NumeroUnidad)
+ * POST /generar-por-numero/:numeroUnidad
+ * Body (opcional): { DiasLimite: 3 }
+ */
+router.post('/generar-por-numero/:numeroUnidad', notificacionesDocentesController.generarPorNumero);
 
 /**
  * Obtener notificaciones del docente autenticado
@@ -37,6 +44,12 @@ router.put('/marcar-leida', notificacionesDocentesController.marcarComoLeida);
  * GET /contador
  */
 router.get('/contador', notificacionesDocentesController.contadorNoLeidas);
+
+/**
+ * Obtener notificaciones pendientes de un docente específico
+ * GET /pendientes/:idDocente
+ */
+router.get('/pendientes/:idDocente', notificacionesDocentesController.pendientesPorDocente);
 
 /**
  * Limpiar notificaciones antiguas (solo admin)

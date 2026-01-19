@@ -299,3 +299,426 @@ exports.delete = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
+/**
+ * Cambiar sección y/o jornada de un alumno
+ * NO permite cambio de grado (ese es un proceso diferente al inicio de año)
+ *
+ * Lógica:
+ * - Elimina SOLO las calificaciones de la unidad actual del grupo ANTERIOR
+ * - Crea calificaciones para TODAS las unidades (1-4) del grupo NUEVO
+ *
+ * POST /api/inscripciones/cambiar-grupo
+ */
+exports.cambiarGrupo = async (req, res) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const {
+      IdInscripcion,
+      IdSeccionNueva,
+      IdJornadaNueva,
+      IdColaborador,
+      Motivo,
+      NumeroUnidadActual  // Unidad actual que se está cursando (1, 2, 3 o 4)
+    } = req.body;
+
+    // ==========================================
+    // VALIDACIONES
+    // ==========================================
+
+    if (!IdInscripcion || isNaN(IdInscripcion)) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: 'IdInscripcion es requerido y debe ser un número'
+      });
+    }
+
+    if (!IdColaborador || isNaN(IdColaborador)) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: 'IdColaborador es requerido y debe ser un número'
+      });
+    }
+
+    // Al menos uno de los dos debe cambiar (sección o jornada)
+    if (!IdSeccionNueva && !IdJornadaNueva) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: 'Debe proporcionar al menos uno: IdSeccionNueva o IdJornadaNueva'
+      });
+    }
+
+    // Validar NumeroUnidadActual (requerido)
+    if (!NumeroUnidadActual || isNaN(NumeroUnidadActual)) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: 'NumeroUnidadActual es requerido (1, 2, 3 o 4)'
+      });
+    }
+
+    const unidadActual = parseInt(NumeroUnidadActual);
+    if (unidadActual < 1 || unidadActual > 4) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: 'NumeroUnidadActual debe ser un número entre 1 y 4'
+      });
+    }
+
+    // ==========================================
+    // 1. OBTENER INSCRIPCIÓN ACTUAL
+    // ==========================================
+
+    const inscripcion = await Inscripcion.findByPk(IdInscripcion, { transaction });
+    if (!inscripcion) {
+      await transaction.rollback();
+      return res.status(404).json({
+        success: false,
+        error: 'Inscripción no encontrada'
+      });
+    }
+
+    // Guardar datos anteriores
+    const datosAnteriores = {
+      IdGrado: inscripcion.IdGrado,
+      IdSeccion: inscripcion.IdSeccion,
+      IdJornada: inscripcion.IdJornada
+    };
+
+    // Determinar nuevos valores (usar actuales si no se envían)
+    // El grado SIEMPRE se mantiene igual
+    const datosNuevos = {
+      IdGrado: inscripcion.IdGrado,  // Grado no cambia
+      IdSeccion: IdSeccionNueva || inscripcion.IdSeccion,
+      IdJornada: IdJornadaNueva || inscripcion.IdJornada
+    };
+
+    // Verificar que realmente haya un cambio
+    if (datosAnteriores.IdSeccion === datosNuevos.IdSeccion &&
+        datosAnteriores.IdJornada === datosNuevos.IdJornada) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: 'Los datos nuevos son iguales a los actuales. No hay cambios que realizar.'
+      });
+    }
+
+    const IdAlumno = inscripcion.IdAlumno;
+    const CicloEscolar = inscripcion.CicloEscolar;
+
+    // ==========================================
+    // 2. OBTENER NOMBRES PARA EL RESPONSE
+    // ==========================================
+
+    const [nombresAnteriores] = await sequelize.query(`
+      SELECT
+        g.NombreGrado,
+        s.NombreSeccion,
+        j.NombreJornada
+      FROM grados g, secciones s, jornadas j
+      WHERE g.IdGrado = :IdGrado
+        AND s.IdSeccion = :IdSeccion
+        AND j.IdJornada = :IdJornada
+    `, {
+      replacements: datosAnteriores,
+      transaction
+    });
+
+    const [nombresNuevos] = await sequelize.query(`
+      SELECT
+        g.NombreGrado,
+        s.NombreSeccion,
+        j.NombreJornada
+      FROM grados g, secciones s, jornadas j
+      WHERE g.IdGrado = :IdGrado
+        AND s.IdSeccion = :IdSeccion
+        AND j.IdJornada = :IdJornada
+    `, {
+      replacements: datosNuevos,
+      transaction
+    });
+
+    // ==========================================
+    // 3. OBTENER ACTIVIDADES DEL GRUPO ANTERIOR
+    //    SOLO de la unidad actual (la que se está cursando)
+    // ==========================================
+
+    const [actividadesAnteriores] = await sequelize.query(`
+      SELECT DISTINCT a.IdActividad, u.NumeroUnidad
+      FROM asignacion_docente ad
+      INNER JOIN unidades u ON ad.IdAsignacionDocente = u.IdAsignacionDocente
+      INNER JOIN actividades a ON u.IdUnidad = a.IdUnidad
+      WHERE ad.IdGrado = :IdGrado
+        AND ad.IdSeccion = :IdSeccion
+        AND ad.IdJornada = :IdJornada
+        AND ad.Anio = :CicloEscolar
+        AND ad.Estado = 1
+        AND u.Estado = 1
+        AND a.Estado = 1
+        AND u.NumeroUnidad = :UnidadActual
+    `, {
+      replacements: { ...datosAnteriores, CicloEscolar, UnidadActual: unidadActual },
+      transaction
+    });
+
+    const idsActividadesAnteriores = actividadesAnteriores.map(a => a.IdActividad);
+
+    // ==========================================
+    // 4. ACTUALIZAR INSCRIPCIÓN
+    // ==========================================
+
+    await inscripcion.update({
+      IdSeccion: datosNuevos.IdSeccion,
+      IdJornada: datosNuevos.IdJornada,
+      ModificadoPor: IdColaborador,
+      FechaModificado: new Date()
+    }, { transaction });
+
+    // ==========================================
+    // 5. OBTENER ACTIVIDADES DEL NUEVO GRUPO
+    //    TODAS las unidades (1-4)
+    // ==========================================
+
+    const [actividadesNuevas] = await sequelize.query(`
+      SELECT DISTINCT
+        a.IdActividad,
+        c.IdCurso,
+        c.Curso AS NombreCurso,
+        u.NumeroUnidad
+      FROM asignacion_docente ad
+      INNER JOIN cursos c ON ad.IdCurso = c.IdCurso
+      INNER JOIN unidades u ON ad.IdAsignacionDocente = u.IdAsignacionDocente
+      INNER JOIN actividades a ON u.IdUnidad = a.IdUnidad
+      WHERE ad.IdGrado = :IdGrado
+        AND ad.IdSeccion = :IdSeccion
+        AND ad.IdJornada = :IdJornada
+        AND ad.Anio = :CicloEscolar
+        AND ad.Estado = 1
+        AND u.Estado = 1
+        AND a.Estado = 1
+    `, {
+      replacements: { ...datosNuevos, CicloEscolar },
+      transaction
+    });
+
+    // ==========================================
+    // 6. CREAR CALIFICACIONES PARA NUEVAS ACTIVIDADES
+    //    (todas las unidades del nuevo grupo)
+    // ==========================================
+
+    let calificacionesCreadas = 0;
+    const detallesPorCursoCreadas = {};
+    const detallesPorUnidadCreadas = {};
+
+    for (const actividad of actividadesNuevas) {
+      // Verificar si ya existe calificación para evitar duplicados
+      const [existente] = await sequelize.query(`
+        SELECT IdCalificacion FROM calificaciones
+        WHERE IdActividad = :idActividad AND IdAlumno = :idAlumno
+      `, {
+        replacements: { idActividad: actividad.IdActividad, idAlumno: IdAlumno },
+        transaction
+      });
+
+      if (existente.length === 0) {
+        // Crear calificación vacía
+        await sequelize.query(`
+          INSERT INTO calificaciones (IdActividad, IdAlumno, Punteo, Observaciones, CreadoPor, FechaCreado)
+          VALUES (:idActividad, :idAlumno, NULL, 'Creado por cambio de sección/jornada', :creadoPor, NOW())
+        `, {
+          replacements: {
+            idActividad: actividad.IdActividad,
+            idAlumno: IdAlumno,
+            creadoPor: IdColaborador
+          },
+          transaction
+        });
+
+        calificacionesCreadas++;
+
+        // Agrupar por curso para el detalle
+        if (!detallesPorCursoCreadas[actividad.IdCurso]) {
+          detallesPorCursoCreadas[actividad.IdCurso] = {
+            IdCurso: actividad.IdCurso,
+            NombreCurso: actividad.NombreCurso,
+            cantidad: 0
+          };
+        }
+        detallesPorCursoCreadas[actividad.IdCurso].cantidad++;
+
+        // Agrupar por unidad
+        if (!detallesPorUnidadCreadas[actividad.NumeroUnidad]) {
+          detallesPorUnidadCreadas[actividad.NumeroUnidad] = 0;
+        }
+        detallesPorUnidadCreadas[actividad.NumeroUnidad]++;
+      }
+    }
+
+    // ==========================================
+    // 7. ELIMINAR CALIFICACIONES DEL GRUPO ANTERIOR
+    //    (solo de la unidad actual)
+    // ==========================================
+
+    let calificacionesEliminadas = 0;
+    let detalleEliminadas = [];
+
+    if (idsActividadesAnteriores.length > 0) {
+      // Obtener detalle antes de eliminar
+      const [detalleEliminacion] = await sequelize.query(`
+        SELECT
+          c.IdCurso,
+          cur.Curso AS NombreCurso,
+          COUNT(*) AS cantidad
+        FROM calificaciones cal
+        INNER JOIN actividades a ON cal.IdActividad = a.IdActividad
+        INNER JOIN unidades u ON a.IdUnidad = u.IdUnidad
+        INNER JOIN asignacion_docente ad ON u.IdAsignacionDocente = ad.IdAsignacionDocente
+        INNER JOIN cursos c ON ad.IdCurso = c.IdCurso
+        INNER JOIN cursos cur ON c.IdCurso = cur.IdCurso
+        WHERE cal.IdAlumno = :idAlumno
+          AND cal.IdActividad IN (:idsActividades)
+        GROUP BY c.IdCurso, cur.Curso
+      `, {
+        replacements: {
+          idAlumno: IdAlumno,
+          idsActividades: idsActividadesAnteriores
+        },
+        transaction
+      });
+
+      detalleEliminadas = detalleEliminacion;
+
+      // Eliminar calificaciones
+      const [resultadoEliminacion] = await sequelize.query(`
+        DELETE FROM calificaciones
+        WHERE IdAlumno = :idAlumno
+          AND IdActividad IN (:idsActividades)
+      `, {
+        replacements: {
+          idAlumno: IdAlumno,
+          idsActividades: idsActividadesAnteriores
+        },
+        transaction
+      });
+
+      calificacionesEliminadas = resultadoEliminacion.affectedRows || 0;
+    }
+
+    // ==========================================
+    // 8. COMMIT Y RESPUESTA
+    // ==========================================
+
+    await transaction.commit();
+
+    res.json({
+      success: true,
+      data: {
+        inscripcion: {
+          IdInscripcion: inscripcion.IdInscripcion,
+          IdAlumno,
+          CicloEscolar,
+          cambio: {
+            anterior: {
+              IdGrado: datosAnteriores.IdGrado,
+              NombreGrado: nombresAnteriores[0]?.NombreGrado || null,
+              IdSeccion: datosAnteriores.IdSeccion,
+              NombreSeccion: nombresAnteriores[0]?.NombreSeccion || null,
+              IdJornada: datosAnteriores.IdJornada,
+              NombreJornada: nombresAnteriores[0]?.NombreJornada || null
+            },
+            nuevo: {
+              IdGrado: datosNuevos.IdGrado,
+              NombreGrado: nombresNuevos[0]?.NombreGrado || null,
+              IdSeccion: datosNuevos.IdSeccion,
+              NombreSeccion: nombresNuevos[0]?.NombreSeccion || null,
+              IdJornada: datosNuevos.IdJornada,
+              NombreJornada: nombresNuevos[0]?.NombreJornada || null
+            }
+          }
+        },
+        calificaciones: {
+          creadas: calificacionesCreadas,
+          eliminadas: calificacionesEliminadas,
+          unidadActual,
+          nota: `Se eliminaron calificaciones solo de la Unidad ${unidadActual}. Se crearon calificaciones para todas las unidades del nuevo grupo.`,
+          detalleCreadas: Object.values(detallesPorCursoCreadas),
+          creadasPorUnidad: detallesPorUnidadCreadas,
+          detalleEliminadas
+        },
+        motivo: Motivo || null
+      },
+      message: `Cambio de sección/jornada completado. ${calificacionesCreadas} calificaciones creadas (todas las unidades), ${calificacionesEliminadas} eliminadas (solo Unidad ${unidadActual}).`
+    });
+
+  } catch (error) {
+    await transaction.rollback();
+    console.error('Error en cambiarGrupo:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+/**
+ * Asignar actividades a un alumno inscrito fuera de tiempo
+ * Llama al SP sp_asignar_actividades_alumno
+ *
+ * POST /api/inscripciones/asignar-actividades
+ */
+exports.asignarActividades = async (req, res) => {
+  try {
+    const { IdInscripcion, IdColaborador } = req.body;
+
+    // Validaciones
+    if (!IdInscripcion || isNaN(IdInscripcion)) {
+      return res.status(400).json({
+        success: false,
+        error: 'IdInscripcion es requerido y debe ser un número'
+      });
+    }
+
+    if (!IdColaborador || isNaN(IdColaborador)) {
+      return res.status(400).json({
+        success: false,
+        error: 'IdColaborador es requerido y debe ser un número'
+      });
+    }
+
+    // Llamar al Stored Procedure
+    const [resultado] = await sequelize.query(
+      'CALL sp_asignar_actividades_alumno(:idInscripcion, :idColaborador)',
+      {
+        replacements: {
+          idInscripcion: IdInscripcion,
+          idColaborador: IdColaborador
+        }
+      }
+    );
+
+    // El SP retorna un array con un objeto
+    const respuestaSP = resultado[0] || resultado;
+
+    if (respuestaSP.success === 1 || respuestaSP.success === true) {
+      res.json({
+        success: true,
+        data: {
+          actividadesEncontradas: respuestaSP.actividadesEncontradas,
+          calificacionesCreadas: respuestaSP.calificacionesCreadas
+        },
+        message: respuestaSP.mensaje
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        error: respuestaSP.mensaje
+      });
+    }
+
+  } catch (error) {
+    console.error('Error en asignarActividades:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};

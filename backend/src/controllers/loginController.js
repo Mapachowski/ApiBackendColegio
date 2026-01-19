@@ -44,15 +44,48 @@ const login = async (req, res) => {
       { expiresIn: '2h' }
     );
 
-    // DEVOLVEMOS NombreCompleto (clave)
+    // Preparar objeto de respuesta
+    const usuarioRespuesta = {
+      IdUsuario: usuarioDB.IdUsuario,
+      NombreUsuario: usuarioDB.NombreUsuario,
+      NombreCompleto: usuarioDB.NombreCompleto,
+      IdRol: usuarioDB.IdRol
+    };
+
+    // Si es docente (rol 4), buscar su IdDocente
+    if (usuarioDB.IdRol === 4) {
+      const docente = await Docente.findOne({
+        where: { idUsuario: usuarioDB.IdUsuario }
+      });
+      if (docente) {
+        usuarioRespuesta.IdDocente = docente.idDocente;
+      }
+    }
+
+    // Si es familia (rol 3), buscar su IdFamilia
+    if (usuarioDB.IdRol === 3) {
+      const familia = await Familia.findOne({
+        where: { IdUsuario: usuarioDB.IdUsuario }
+      });
+      if (familia) {
+        usuarioRespuesta.IdFamilia = familia.IdFamilia;
+      }
+    }
+
+    // Si es alumno (rol 5), buscar su IdAlumno
+    if (usuarioDB.IdRol === 5) {
+      const alumno = await Alumno.findOne({
+        where: { IdUsuario: usuarioDB.IdUsuario }
+      });
+      if (alumno) {
+        usuarioRespuesta.IdAlumno = alumno.IdAlumno;
+        usuarioRespuesta.Matricula = alumno.Matricula;
+      }
+    }
+
     return res.json({
       message: 'Login exitoso',
-      usuario: {
-        IdUsuario: usuarioDB.IdUsuario,
-        NombreUsuario: usuarioDB.NombreUsuario,
-        NombreCompleto: usuarioDB.NombreCompleto, // AQUÍ ESTÁ
-        IdRol: usuarioDB.IdRol
-      },
+      usuario: usuarioRespuesta,
       token
     });
 

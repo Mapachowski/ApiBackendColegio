@@ -108,96 +108,121 @@ exports.obtenerCalificaciones = async (req, res) => {
       });
     }
 
-    // 2. Obtener todas las notas del estudiante agrupadas por curso
-    const [notasRaw] = await sequelize.query(`
-      SELECT
+    // 2. Obtener TODOS los cursos asignados al estudiante (a través de asignacion_docente)
+    const [cursosAsignados] = await sequelize.query(`
+      SELECT DISTINCT
         c.idCurso,
         c.Curso AS NombreCurso,
         c.NoOrden,
-        u.IdUnidad,
+        ad.idAsignacionDocente AS IdAsignacionDocente
+      FROM asignacion_docente ad
+      INNER JOIN cursos c ON ad.idCurso = c.idCurso
+      WHERE ad.Anio = :cicloEscolar
+        AND ad.idGrado = :idGrado
+        AND ad.idSeccion = :idSeccion
+        AND ad.idJornada = :idJornada
+        AND ad.Estado = 1
+      ORDER BY c.NoOrden, c.Curso
+    `, {
+      replacements: { cicloEscolar, idGrado, idSeccion, idJornada }
+    });
+
+    // 3. Obtener las notas existentes del estudiante
+    const [notasRaw] = await sequelize.query(`
+      SELECT
+        c.idCurso,
         u.NumeroUnidad,
-        u.NombreUnidad,
         nu.NotaTotal
       FROM notas_unidad nu
       INNER JOIN unidades u ON nu.IdUnidad = u.IdUnidad
-      INNER JOIN asignacion_docente ad ON nu.IdAsignacionDocente = ad.IdAsignacionDocente
-      INNER JOIN cursos c ON ad.IdCurso = c.idCurso
+      INNER JOIN asignacion_docente ad ON nu.IdAsignacionDocente = ad.idAsignacionDocente
+      INNER JOIN cursos c ON ad.idCurso = c.idCurso
       WHERE nu.IdAlumno = :idAlumno
         AND ad.Anio = :cicloEscolar
-        AND ad.IdGrado = :idGrado
-        AND ad.IdSeccion = :idSeccion
-        AND ad.IdJornada = :idJornada
+        AND ad.idGrado = :idGrado
+        AND ad.idSeccion = :idSeccion
+        AND ad.idJornada = :idJornada
         AND nu.Estado = 1
-        AND u.Estado = 1
       ORDER BY c.NoOrden, u.NumeroUnidad
     `, {
-      replacements: {
-        idAlumno,
-        cicloEscolar,
-        idGrado,
-        idSeccion,
-        idJornada
-      }
+      replacements: { idAlumno, cicloEscolar, idGrado, idSeccion, idJornada }
     });
 
-    // 3. Agrupar notas por curso
-    const cursosMap = {};
-
+    // 4. Crear mapa de notas por curso y unidad
+    const notasMap = {};
     notasRaw.forEach(nota => {
-      if (!cursosMap[nota.idCurso]) {
-        cursosMap[nota.idCurso] = {
-          idCurso: nota.idCurso,
-          NombreCurso: nota.NombreCurso,
-          NoOrden: nota.NoOrden,
-          unidades: []
-        };
+      if (!notasMap[nota.idCurso]) {
+        notasMap[nota.idCurso] = {};
       }
-
-      cursosMap[nota.idCurso].unidades.push({
-        IdUnidad: nota.IdUnidad,
-        NumeroUnidad: nota.NumeroUnidad,
-        NombreUnidad: nota.NombreUnidad,
-        NotaFinal: Math.round(parseFloat(nota.NotaTotal)) // Redondear a entero
-      });
+      notasMap[nota.idCurso][nota.NumeroUnidad] = Math.round(parseFloat(nota.NotaTotal));
     });
 
-    // 4. Calcular promedios por curso (SIEMPRE dividir entre 4 unidades)
-    const cursos = Object.values(cursosMap).map(curso => {
-      // Asegurar que siempre haya 4 unidades (rellenar con 0 las faltantes)
+    // 5. Determinar cuál es la última unidad cerrada (para mostrar promedio)
+    const [ultimaUnidadCerrada] = await sequelize.query(`
+      SELECT MAX(u.NumeroUnidad) AS UltimaUnidad
+      FROM unidades u
+      INNER JOIN asignacion_docente ad ON u.IdAsignacionDocente = ad.idAsignacionDocente
+      WHERE ad.Anio = :cicloEscolar
+        AND ad.idGrado = :idGrado
+        AND ad.idSeccion = :idSeccion
+        AND ad.idJornada = :idJornada
+        AND u.Cerrada = 1
+    `, {
+      replacements: { cicloEscolar, idGrado, idSeccion, idJornada }
+    });
+    const ultimaUnidadNum = ultimaUnidadCerrada[0]?.UltimaUnidad || 0;
+
+    // 6. Construir la estructura de cursos con todas las unidades
+    const cursos = cursosAsignados.map(cursoAsignado => {
       const unidadesCompletas = [];
       let sumaNotas = 0;
+      let unidadesConNota = 0;
 
       for (let numUnidad = 1; numUnidad <= 4; numUnidad++) {
-        const unidadExistente = curso.unidades.find(u => u.NumeroUnidad === numUnidad);
+        const notaCurso = notasMap[cursoAsignado.idCurso];
+        const tieneNota = notaCurso && notaCurso[numUnidad] !== undefined;
 
-        if (unidadExistente) {
-          unidadesCompletas.push(unidadExistente);
-          sumaNotas += unidadExistente.NotaFinal;
-        } else {
-          // Unidad sin calificación, agregar con nota 0
+        if (tieneNota) {
           unidadesCompletas.push({
             NumeroUnidad: numUnidad,
-            NotaFinal: 0
+            NotaFinal: notaCurso[numUnidad]
           });
-          // sumaNotas += 0 (no es necesario sumar)
+          sumaNotas += notaCurso[numUnidad];
+          unidadesConNota++;
+        } else {
+          // Unidad sin calificación - mostrar null para que el frontend muestre guión
+          unidadesCompletas.push({
+            NumeroUnidad: numUnidad,
+            NotaFinal: null
+          });
         }
       }
 
-      // IMPORTANTE: Siempre dividir entre 4, no entre la cantidad de notas
-      const promedio = Math.round(sumaNotas / 4);
+      // Calcular promedio dividiendo SIEMPRE entre 4 (las 4 unidades del año)
+      // Ejemplo: Si tiene 100 en U1, promedio = 100/4 = 25
+      // Si tiene 100 en U1 y 80 en U2, promedio = 180/4 = 45
+      let promedio = null;
+      if (unidadesConNota > 0) {
+        promedio = Math.round(sumaNotas / 4);
+      }
 
       return {
-        ...curso,
-        unidades: unidadesCompletas, // Devolver las 4 unidades completas
+        idCurso: cursoAsignado.idCurso,
+        NombreCurso: cursoAsignado.NombreCurso,
+        NoOrden: cursoAsignado.NoOrden,
+        unidades: unidadesCompletas,
         promedio
       };
     });
 
-    // 5. Calcular promedio general
-    const promediosCursos = cursos.map(c => c.promedio);
-    const promedioGeneral = promediosCursos.length > 0
-      ? Math.round(promediosCursos.reduce((sum, p) => sum + p, 0) / promediosCursos.length)
-      : 0;
+    // 7. Calcular promedio general SOLO si estamos en la 4ta unidad
+    let promedioGeneral = null;
+    if (ultimaUnidadNum === 4) {
+      const promediosCursos = cursos.filter(c => c.promedio !== null).map(c => c.promedio);
+      if (promediosCursos.length > 0) {
+        promedioGeneral = Math.round(promediosCursos.reduce((sum, p) => sum + p, 0) / promediosCursos.length);
+      }
+    }
 
     // 6. Formatear respuesta
     const inscripcion = alumno.Inscripciones[0];
@@ -293,103 +318,121 @@ exports.obtenerCalificacionesLote = async (req, res) => {
 
         console.log(`✅ Alumno encontrado: ${alumno.Nombres} ${alumno.Apellidos}`);
 
-        // 2. Obtener notas
+        // 2. Obtener TODOS los cursos asignados
+        const [cursosAsignados] = await sequelize.query(`
+          SELECT DISTINCT
+            c.idCurso,
+            c.Curso AS NombreCurso,
+            c.NoOrden
+          FROM asignacion_docente ad
+          INNER JOIN cursos c ON ad.idCurso = c.idCurso
+          WHERE ad.Anio = :cicloEscolar
+            AND ad.idGrado = :idGrado
+            AND ad.idSeccion = :idSeccion
+            AND ad.idJornada = :idJornada
+            AND ad.Estado = 1
+          ORDER BY c.NoOrden, c.Curso
+        `, {
+          replacements: { cicloEscolar, idGrado, idSeccion, idJornada }
+        });
+
+        // 3. Obtener las notas existentes del estudiante
         const [notasRaw] = await sequelize.query(`
           SELECT
             c.idCurso,
-            c.Curso AS NombreCurso,
-            c.NoOrden,
-            u.IdUnidad,
             u.NumeroUnidad,
-            u.NombreUnidad,
             nu.NotaTotal
           FROM notas_unidad nu
           INNER JOIN unidades u ON nu.IdUnidad = u.IdUnidad
-          INNER JOIN asignacion_docente ad ON nu.IdAsignacionDocente = ad.IdAsignacionDocente
-          INNER JOIN cursos c ON ad.IdCurso = c.idCurso
+          INNER JOIN asignacion_docente ad ON nu.IdAsignacionDocente = ad.idAsignacionDocente
+          INNER JOIN cursos c ON ad.idCurso = c.idCurso
           WHERE nu.IdAlumno = :idAlumno
             AND ad.Anio = :cicloEscolar
-            AND ad.IdGrado = :idGrado
-            AND ad.IdSeccion = :idSeccion
-            AND ad.IdJornada = :idJornada
+            AND ad.idGrado = :idGrado
+            AND ad.idSeccion = :idSeccion
+            AND ad.idJornada = :idJornada
             AND nu.Estado = 1
-            AND u.Estado = 1
           ORDER BY c.NoOrden, u.NumeroUnidad
         `, {
-          replacements: {
-            idAlumno,
-            cicloEscolar,
-            idGrado,
-            idSeccion,
-            idJornada
-          }
+          replacements: { idAlumno, cicloEscolar, idGrado, idSeccion, idJornada }
         });
 
-        console.log(`📝 Notas encontradas: ${notasRaw.length}`);
+        console.log(`📝 Cursos asignados: ${cursosAsignados.length}, Notas encontradas: ${notasRaw.length}`);
 
-        // Si no tiene notas, saltar
-        if (notasRaw.length === 0) {
-          console.log(`⚠️ Alumno ${idAlumno} no tiene calificaciones registradas`);
-          errores++;
-          continue;
-        }
-
-        // 3. Agrupar por curso
-        const cursosMap = {};
+        // 4. Crear mapa de notas por curso y unidad
+        const notasMap = {};
         notasRaw.forEach(nota => {
-          if (!cursosMap[nota.idCurso]) {
-            cursosMap[nota.idCurso] = {
-              idCurso: nota.idCurso,
-              NombreCurso: nota.NombreCurso,
-              NoOrden: nota.NoOrden,
-              unidades: []
-            };
+          if (!notasMap[nota.idCurso]) {
+            notasMap[nota.idCurso] = {};
           }
-          cursosMap[nota.idCurso].unidades.push({
-            IdUnidad: nota.IdUnidad,
-            NumeroUnidad: nota.NumeroUnidad,
-            NombreUnidad: nota.NombreUnidad,
-            NotaFinal: Math.round(parseFloat(nota.NotaTotal))
-          });
+          notasMap[nota.idCurso][nota.NumeroUnidad] = Math.round(parseFloat(nota.NotaTotal));
         });
 
-        // 4. Calcular promedios (SIEMPRE dividir entre 4 unidades)
-        const cursos = Object.values(cursosMap).map(curso => {
-          // Asegurar que siempre haya 4 unidades (rellenar con 0 las faltantes)
+        // 5. Determinar última unidad cerrada
+        const [ultimaUnidadCerrada] = await sequelize.query(`
+          SELECT MAX(u.NumeroUnidad) AS UltimaUnidad
+          FROM unidades u
+          INNER JOIN asignacion_docente ad ON u.IdAsignacionDocente = ad.idAsignacionDocente
+          WHERE ad.Anio = :cicloEscolar
+            AND ad.idGrado = :idGrado
+            AND ad.idSeccion = :idSeccion
+            AND ad.idJornada = :idJornada
+            AND u.Cerrada = 1
+        `, {
+          replacements: { cicloEscolar, idGrado, idSeccion, idJornada }
+        });
+        const ultimaUnidadNum = ultimaUnidadCerrada[0]?.UltimaUnidad || 0;
+
+        // 6. Construir la estructura de cursos con todas las unidades
+        const cursos = cursosAsignados.map(cursoAsignado => {
           const unidadesCompletas = [];
           let sumaNotas = 0;
+          let unidadesConNota = 0;
 
           for (let numUnidad = 1; numUnidad <= 4; numUnidad++) {
-            const unidadExistente = curso.unidades.find(u => u.NumeroUnidad === numUnidad);
+            const notaCurso = notasMap[cursoAsignado.idCurso];
+            const tieneNota = notaCurso && notaCurso[numUnidad] !== undefined;
 
-            if (unidadExistente) {
-              unidadesCompletas.push(unidadExistente);
-              sumaNotas += unidadExistente.NotaFinal;
-            } else {
-              // Unidad sin calificación, agregar con nota 0
+            if (tieneNota) {
               unidadesCompletas.push({
                 NumeroUnidad: numUnidad,
-                NotaFinal: 0
+                NotaFinal: notaCurso[numUnidad]
+              });
+              sumaNotas += notaCurso[numUnidad];
+              unidadesConNota++;
+            } else {
+              unidadesCompletas.push({
+                NumeroUnidad: numUnidad,
+                NotaFinal: null
               });
             }
           }
 
-          // IMPORTANTE: Siempre dividir entre 4, no entre la cantidad de notas
-          const promedio = Math.round(sumaNotas / 4);
+          // Calcular promedio dividiendo SIEMPRE entre 4 (las 4 unidades del año)
+          let promedio = null;
+          if (unidadesConNota > 0) {
+            promedio = Math.round(sumaNotas / 4);
+          }
 
           return {
-            ...curso,
-            unidades: unidadesCompletas, // Devolver las 4 unidades completas
+            idCurso: cursoAsignado.idCurso,
+            NombreCurso: cursoAsignado.NombreCurso,
+            NoOrden: cursoAsignado.NoOrden,
+            unidades: unidadesCompletas,
             promedio
           };
         });
 
         console.log(`📚 Cursos procesados: ${cursos.length}`);
 
-        const promediosCursos = cursos.map(c => c.promedio);
-        const promedioGeneral = promediosCursos.length > 0
-          ? Math.round(promediosCursos.reduce((sum, p) => sum + p, 0) / promediosCursos.length)
-          : 0;
+        // 7. Promedio general SOLO si estamos en la 4ta unidad
+        let promedioGeneral = null;
+        if (ultimaUnidadNum === 4) {
+          const promediosCursos = cursos.filter(c => c.promedio !== null).map(c => c.promedio);
+          if (promediosCursos.length > 0) {
+            promedioGeneral = Math.round(promediosCursos.reduce((sum, p) => sum + p, 0) / promediosCursos.length);
+          }
+        }
 
         const inscripcion = alumno.Inscripciones[0];
 

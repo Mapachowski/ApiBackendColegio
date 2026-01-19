@@ -69,7 +69,12 @@ exports.crearSolicitud = async (req, res) => {
 
     // Verificar que el docente sea dueño de la unidad
     const asignacion = await AsignacionDocente.findByPk(unidad.IdAsignacionDocente);
-    if (!asignacion || asignacion.IdDocente !== idDocente) {
+    // El modelo Sequelize usa 'IdDocente' (mayúscula) como está definido en el modelo
+    // Convertir ambos a número para comparar correctamente
+    const idDocenteAsignacion = asignacion ? parseInt(asignacion.IdDocente) : null;
+    const idDocenteSolicitud = parseInt(idDocente);
+
+    if (!asignacion || idDocenteAsignacion !== idDocenteSolicitud) {
       return res.status(403).json({
         success: false,
         error: 'No tienes permiso para solicitar reapertura de esta unidad'
@@ -175,6 +180,7 @@ exports.obtenerPendientes = async (req, res) => {
     }
 
     // Obtener solicitudes pendientes con información relacionada
+    // Nota: asignacion_docente usa minúsculas en sus columnas
     const [solicitudes] = await sequelize.query(`
       SELECT
         sr.IdSolicitud,
@@ -183,16 +189,18 @@ exports.obtenerPendientes = async (req, res) => {
         c.Curso AS NombreCurso,
         g.NombreGrado,
         s.NombreSeccion,
-        d.NombreDocente AS DocenteSolicitante,
+        j.NombreJornada,
+        d.NombreDocente,
         sr.Motivo,
         sr.FechaSolicitud,
         sr.Estado
       FROM solicitudes_reapertura sr
       INNER JOIN unidades u ON sr.IdUnidad = u.IdUnidad
-      INNER JOIN asignacion_docente ad ON u.IdAsignacionDocente = ad.IdAsignacionDocente
-      INNER JOIN cursos c ON ad.IdCurso = c.idCurso
-      INNER JOIN grados g ON ad.IdGrado = g.IdGrado
-      INNER JOIN secciones s ON ad.IdSeccion = s.IdSeccion
+      INNER JOIN asignacion_docente ad ON u.IdAsignacionDocente = ad.idAsignacionDocente
+      INNER JOIN cursos c ON ad.idCurso = c.idCurso
+      INNER JOIN grados g ON ad.idGrado = g.IdGrado
+      INNER JOIN secciones s ON ad.idSeccion = s.IdSeccion
+      INNER JOIN jornadas j ON ad.idJornada = j.IdJornada
       INNER JOIN docentes d ON sr.SolicitadoPor = d.idDocente
       WHERE sr.Estado = 'pendiente'
       ORDER BY sr.FechaSolicitud ASC
@@ -274,11 +282,41 @@ exports.procesarSolicitud = async (req, res) => {
 
     // Si se aprueba, reabrir la unidad
     let unidadActiva = false;
+    let unidadDesactivada = null;
     if (Accion === 'aprobar') {
       const unidad = await Unidad.findByPk(solicitud.IdUnidad);
       if (unidad) {
+        // Primero desactivar cualquier otra unidad activa de esta asignación
+        // (El trigger solo permite una unidad activa por asignación)
+        const unidadActivaActual = await Unidad.findOne({
+          where: {
+            IdAsignacionDocente: unidad.IdAsignacionDocente,
+            Activa: 1
+          },
+          transaction
+        });
+
+        if (unidadActivaActual && unidadActivaActual.IdUnidad !== unidad.IdUnidad) {
+          // Desactivar la unidad que está actualmente activa
+          await unidadActivaActual.update({
+            Activa: 0,
+            ModificadoPor: req.usuario?.email || req.usuario?.nombre || 'Admin',
+            FechaModificado: new Date()
+          }, { transaction });
+          unidadDesactivada = {
+            IdUnidad: unidadActivaActual.IdUnidad,
+            NombreUnidad: unidadActivaActual.NombreUnidad
+          };
+        }
+
+        // Ahora activar la unidad solicitada y marcarla como no cerrada
+        // Activa = 1: El docente puede editar calificaciones
+        // Cerrada = 0: La unidad aparecerá nuevamente en "Cierre de Unidades" cuando esté lista
         await unidad.update({
           Activa: 1,
+          Cerrada: 0,
+          FechaCierre: null,
+          CerradaPorAdmin: null,
           ModificadoPor: req.usuario?.email || req.usuario?.nombre || 'Admin',
           FechaModificado: new Date()
         }, { transaction });
@@ -288,9 +326,15 @@ exports.procesarSolicitud = async (req, res) => {
 
     await transaction.commit();
 
-    const mensaje = Accion === 'aprobar'
-      ? 'Solicitud aprobada. La unidad ha sido reabierta.'
-      : 'Solicitud rechazada.';
+    let mensaje = '';
+    if (Accion === 'aprobar') {
+      mensaje = 'Solicitud aprobada. La unidad ha sido reabierta.';
+      if (unidadDesactivada) {
+        mensaje += ` Se desactivó automáticamente la ${unidadDesactivada.NombreUnidad} para permitir la reapertura.`;
+      }
+    } else {
+      mensaje = 'Solicitud rechazada.';
+    }
 
     res.json({
       success: true,
@@ -299,7 +343,8 @@ exports.procesarSolicitud = async (req, res) => {
         IdSolicitud: solicitud.IdSolicitud,
         Estado: nuevoEstado,
         IdUnidad: solicitud.IdUnidad,
-        UnidadActiva: unidadActiva
+        UnidadActiva: unidadActiva,
+        UnidadDesactivada: unidadDesactivada
       }
     });
 
@@ -343,12 +388,16 @@ exports.misSolicitudes = async (req, res) => {
     }
 
     // Obtener solicitudes del docente con información relacionada
+    // Nota: asignacion_docente usa minúsculas en sus columnas
     const [solicitudes] = await sequelize.query(`
       SELECT
         sr.IdSolicitud,
         sr.IdUnidad,
         u.NombreUnidad,
         c.Curso AS NombreCurso,
+        g.NombreGrado,
+        s.NombreSeccion,
+        j.NombreJornada,
         sr.Motivo,
         sr.Estado,
         sr.FechaSolicitud,
@@ -357,8 +406,11 @@ exports.misSolicitudes = async (req, res) => {
         sr.ObservacionesAprobacion
       FROM solicitudes_reapertura sr
       INNER JOIN unidades u ON sr.IdUnidad = u.IdUnidad
-      INNER JOIN asignacion_docente ad ON u.IdAsignacionDocente = ad.IdAsignacionDocente
-      INNER JOIN cursos c ON ad.IdCurso = c.idCurso
+      INNER JOIN asignacion_docente ad ON u.IdAsignacionDocente = ad.idAsignacionDocente
+      INNER JOIN cursos c ON ad.idCurso = c.idCurso
+      INNER JOIN grados g ON ad.idGrado = g.IdGrado
+      INNER JOIN secciones s ON ad.idSeccion = s.IdSeccion
+      INNER JOIN jornadas j ON ad.idJornada = j.IdJornada
       LEFT JOIN usuarios us ON sr.AprobadoPor = us.IdUsuario
       WHERE sr.SolicitadoPor = :idDocente
       ORDER BY sr.FechaSolicitud DESC
