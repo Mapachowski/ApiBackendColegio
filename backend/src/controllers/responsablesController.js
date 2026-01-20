@@ -49,9 +49,17 @@ exports.getByIdFamilia = async (req, res) => {
 // Obtener responsables activos con información completa
 exports.getResponsablesActivos = async (req, res) => {
   try {
-    const results = await sequelize.query('CALL sp_ObtenerResponsablesActivos()', {
-      type: sequelize.QueryTypes.SELECT
-    });
+    // Parámetro opcional soloResponsables (true/false o 1/0)
+    const { soloResponsables } = req.query;
+    const filtroResponsables = soloResponsables === 'true' || soloResponsables === '1' ? 1 : 0;
+
+    const results = await sequelize.query(
+      'CALL sp_ObtenerResponsablesActivos(:soloResponsables)',
+      {
+        replacements: { soloResponsables: filtroResponsables },
+        type: sequelize.QueryTypes.SELECT
+      }
+    );
 
     if (!results || results.length === 0) {
       return res.status(404).json({
@@ -70,7 +78,7 @@ exports.getResponsablesActivos = async (req, res) => {
 // Obtener responsables por grado con filtros
 exports.getResponsablesPorGrado = async (req, res) => {
   try {
-    const { p_CicloEscolar, IdGrado, IdSeccion, IdJornada } = req.query;
+    const { p_CicloEscolar, IdGrado, IdSeccion, IdJornada, soloResponsables } = req.query;
 
     // Validación obligatoria del ciclo escolar
     if (!p_CicloEscolar) {
@@ -99,6 +107,7 @@ exports.getResponsablesPorGrado = async (req, res) => {
     // Parámetros opcionales
     const seccionId = IdSeccion ? parseInt(IdSeccion, 10) : null;
     const jornadaId = IdJornada ? parseInt(IdJornada, 10) : null;
+    const filtroResponsables = soloResponsables === 'true' || soloResponsables === '1' ? 1 : 0;
 
     if (IdSeccion && isNaN(seccionId)) {
       return res.status(400).json({ success: false, error: 'IdSeccion debe ser un número' });
@@ -109,13 +118,14 @@ exports.getResponsablesPorGrado = async (req, res) => {
 
     // Llamar al stored procedure con replacements para prevenir SQL injection
     const results = await sequelize.query(
-      'CALL sp_obtenerresponsablesporgrado(:ciclo, :grado, :seccion, :jornada)',
+      'CALL sp_obtenerresponsablesporgrado(:ciclo, :grado, :seccion, :jornada, :soloResponsables)',
       {
         replacements: {
           ciclo: p_CicloEscolar,
           grado: gradoId,
           seccion: seccionId,
-          jornada: jornadaId
+          jornada: jornadaId,
+          soloResponsables: filtroResponsables
         },
         type: sequelize.QueryTypes.SELECT
       }

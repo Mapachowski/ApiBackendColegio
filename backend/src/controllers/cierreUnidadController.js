@@ -1221,5 +1221,4 @@ exports.cerrarCursosListos = async (req, res) => {
   }
 };
 
-
 module.exports = exports;
