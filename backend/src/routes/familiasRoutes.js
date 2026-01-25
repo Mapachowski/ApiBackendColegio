@@ -4,6 +4,9 @@ const familiasController = require('../controllers/familiasController'); // Impo
 
 // Rutas específicas PRIMERO (antes de las rutas con :id)
 router.get('/completas', familiasController.getFamiliasCompletas);  // GET /api/familias/completas
+router.get('/activas-con-responsables', familiasController.getFamiliasActivasConResponsables);  // GET /api/familias/activas-con-responsables
+router.get('/por-grado', familiasController.getFamiliasPorGrado);  // GET /api/familias/por-grado
+router.get('/familias-hijos-por-grado', familiasController.getFamiliasYHijosPorGrado);  // GET /api/familias/familias-hijos-por-grado
 router.get('/hijosporfamilia/:idFamilia', familiasController.getHijosPorFamilia);  // GET /api/familias/hijosporfamilia/:idFamilia
 router.get('/hijo/:idAlumno/cursos-detallados', familiasController.getCursosDetalladosHijo);  // GET /api/familias/hijo/:idAlumno/cursos-detallados
 

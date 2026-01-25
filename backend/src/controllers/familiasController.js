@@ -345,3 +345,176 @@ exports.getCursosDetalladosHijo = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
+// Obtener familias activas con responsables e hijos agregados
+exports.getFamiliasActivasConResponsables = async (req, res) => {
+  try {
+    // Parámetro opcional soloResponsables (true/false o 1/0)
+    const { soloResponsables } = req.query;
+    const filtroResponsables = soloResponsables === 'true' || soloResponsables === '1' ? 1 : 0;
+
+    const results = await sequelize.query(
+      'CALL sp_ObtenerFamiliasActivasConResponsables(:soloResponsables)',
+      {
+        replacements: { soloResponsables: filtroResponsables },
+        type: sequelize.QueryTypes.SELECT
+      }
+    );
+
+    if (!results || results.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'No se encontraron familias activas'
+      });
+    }
+
+    res.json({ success: true, data: results, total: results.length });
+  } catch (error) {
+    console.error('Error en getFamiliasActivasConResponsables:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// Obtener familias por grado del hijo con información completa
+exports.getFamiliasPorGrado = async (req, res) => {
+  try {
+    const { CicloEscolar, p_CicloEscolar, IdGrado, IdSeccion, IdJornada, soloResponsables } = req.query;
+
+    // Aceptar tanto CicloEscolar como p_CicloEscolar para compatibilidad
+    const cicloEscolar = CicloEscolar || p_CicloEscolar;
+
+    // Validación obligatoria del ciclo escolar
+    if (!cicloEscolar) {
+      return res.status(400).json({
+        success: false,
+        error: 'El parámetro CicloEscolar (o p_CicloEscolar) es obligatorio'
+      });
+    }
+
+    if (typeof cicloEscolar !== 'string' || cicloEscolar.length !== 4 || !/^\d{4}$/.test(cicloEscolar)) {
+      return res.status(400).json({
+        success: false,
+        error: 'CicloEscolar debe ser un año de 4 dígitos (ej. 2026)'
+      });
+    }
+
+    // Validación obligatoria de IdGrado
+    const gradoId = IdGrado ? parseInt(IdGrado, 10) : null;
+    if (!IdGrado || isNaN(gradoId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'IdGrado es obligatorio y debe ser un número'
+      });
+    }
+
+    // Parámetros opcionales
+    const seccionId = IdSeccion ? parseInt(IdSeccion, 10) : null;
+    const jornadaId = IdJornada ? parseInt(IdJornada, 10) : null;
+    const filtroResponsables = soloResponsables === 'true' || soloResponsables === '1' ? 1 : 0;
+
+    if (IdSeccion && isNaN(seccionId)) {
+      return res.status(400).json({ success: false, error: 'IdSeccion debe ser un número' });
+    }
+    if (IdJornada && isNaN(jornadaId)) {
+      return res.status(400).json({ success: false, error: 'IdJornada debe ser un número' });
+    }
+
+    // Llamar al stored procedure
+    const results = await sequelize.query(
+      'CALL sp_ObtenerFamiliasPorGrado(:ciclo, :grado, :seccion, :jornada, :soloResponsables)',
+      {
+        replacements: {
+          ciclo: cicloEscolar,
+          grado: gradoId,
+          seccion: seccionId,
+          jornada: jornadaId,
+          soloResponsables: filtroResponsables
+        },
+        type: sequelize.QueryTypes.SELECT
+      }
+    );
+
+    if (!results || results.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'No se encontraron familias con los filtros proporcionados'
+      });
+    }
+
+    res.json({ success: true, data: results, total: results.length });
+  } catch (error) {
+    console.error('Error en getFamiliasPorGrado:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// Obtener familias y sus hijos por grado (con el otro SP que ya existe)
+exports.getFamiliasYHijosPorGrado = async (req, res) => {
+  try {
+    const { CicloEscolar, p_CicloEscolar, IdGrado, IdSeccion, IdJornada } = req.query;
+
+    // Aceptar tanto CicloEscolar como p_CicloEscolar para compatibilidad
+    const cicloEscolar = CicloEscolar || p_CicloEscolar;
+
+    // Validación obligatoria del ciclo escolar
+    if (!cicloEscolar) {
+      return res.status(400).json({
+        success: false,
+        error: 'El parámetro CicloEscolar (o p_CicloEscolar) es obligatorio'
+      });
+    }
+
+    if (typeof cicloEscolar !== 'string' || cicloEscolar.length !== 4 || !/^\d{4}$/.test(cicloEscolar)) {
+      return res.status(400).json({
+        success: false,
+        error: 'CicloEscolar debe ser un año de 4 dígitos (ej. 2026)'
+      });
+    }
+
+    // Validación obligatoria de IdGrado
+    const gradoId = IdGrado ? parseInt(IdGrado, 10) : null;
+    if (!IdGrado || isNaN(gradoId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'IdGrado es obligatorio y debe ser un número'
+      });
+    }
+
+    // Parámetros opcionales
+    const seccionId = IdSeccion ? parseInt(IdSeccion, 10) : null;
+    const jornadaId = IdJornada ? parseInt(IdJornada, 10) : null;
+
+    if (IdSeccion && isNaN(seccionId)) {
+      return res.status(400).json({ success: false, error: 'IdSeccion debe ser un número' });
+    }
+    if (IdJornada && isNaN(jornadaId)) {
+      return res.status(400).json({ success: false, error: 'IdJornada debe ser un número' });
+    }
+
+    // Llamar al stored procedure
+    const results = await sequelize.query(
+      'CALL sp_ObtenerFamiliasActivasConResponsables(:ciclo, :grado, :seccion, :jornada)',
+      {
+        replacements: {
+          ciclo: cicloEscolar,
+          grado: gradoId,
+          seccion: seccionId,
+          jornada: jornadaId
+        },
+        type: sequelize.QueryTypes.SELECT
+      }
+    );
+
+    if (!results || results.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'No se encontraron familias con los filtros proporcionados'
+      });
+    }
+
+    res.json({ success: true, data: results, total: results.length });
+  } catch (error) {
+    console.error('Error en getFamiliasYHijosPorGrado:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
