@@ -257,24 +257,8 @@ exports.update = async (req, res) => {
     }
 
     // ============================================
-    // VALIDACIÓN DE FECHA LÍMITE
-    // ============================================
-    const fechaActual = new Date();
-    const fechaLimiteActividad = new Date(actividad.FechaActividad);
-
-    if (fechaActual > fechaLimiteActividad) {
-      return res.status(403).json({
-        success: false,
-        error: 'No se puede modificar la actividad porque la fecha límite ya pasó',
-        detalles: {
-          fechaLimite: actividad.FechaActividad,
-          fechaActual: fechaActual.toISOString().split('T')[0],
-        },
-      });
-    }
-
-    // ============================================
     // ACTUALIZAR LA ACTIVIDAD
+    // (Se permite editar siempre que la unidad esté abierta)
     // ============================================
     await actividad.update({
       ...req.body,
