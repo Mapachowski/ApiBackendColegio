@@ -297,6 +297,70 @@ exports.getInsolventes = async (req, res) => {
   }
 };
 
+// Obtener alumnos solventes por ciclo escolar y mes
+exports.getSolventes = async (req, res) => {
+  try {
+    const { cicloEscolar, mes } = req.query;
+
+    // Validación obligatoria del ciclo escolar
+    if (!cicloEscolar) {
+      return res.status(400).json({
+        success: false,
+        error: 'El parámetro cicloEscolar es obligatorio'
+      });
+    }
+
+    // Validar formato de ciclo escolar
+    if (typeof cicloEscolar !== 'string' || cicloEscolar.length !== 4 || !/^\d{4}$/.test(cicloEscolar)) {
+      return res.status(400).json({
+        success: false,
+        error: 'cicloEscolar debe ser un año de 4 dígitos (ej. 2026)'
+      });
+    }
+
+    // Validación obligatoria del mes
+    if (!mes) {
+      return res.status(400).json({
+        success: false,
+        error: 'El parámetro mes es obligatorio'
+      });
+    }
+
+    // Validar que el mes sea un número entre 1 y 10
+    const mesNumero = parseInt(mes, 10);
+    if (isNaN(mesNumero) || mesNumero < 1 || mesNumero > 10) {
+      return res.status(400).json({
+        success: false,
+        error: 'El mes debe ser un número entre 1 y 10'
+      });
+    }
+
+    // Llamar al stored procedure con replacements para prevenir SQL injection
+    const results = await sequelize.query(
+      'CALL sp_obtenerAlumnosSolventes(:cicloEscolar, :mes)',
+      {
+        replacements: {
+          cicloEscolar: cicloEscolar,
+          mes: mesNumero
+        },
+        type: sequelize.QueryTypes.SELECT
+      }
+    );
+
+    if (!results || results.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'No se encontraron alumnos solventes con los filtros proporcionados'
+      });
+    }
+
+    res.json({ success: true, data: results, total: results.length });
+  } catch (error) {
+    console.error('Error en getSolventes:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 // Buscar pagos por nombre de recibo, número de recibo y ciclo escolar
 exports.buscarPagos = async (req, res) => {
   try {

@@ -7,6 +7,7 @@ router.get('/meses-pagados/:idAlumno/:tipoPago/:cicloEscolar', pagosController.g
 router.get('/reporte', pagosController.getReportePagos);
 router.get('/hoy', pagosController.getPagosHoy);
 router.get('/insolventes', pagosController.getInsolventes);
+router.get('/solventes', pagosController.getSolventes);
 router.get('/buscar', pagosController.buscarPagos);
 router.get('/numero/:numeroRecibo', pagosController.getByNumeroRecibo);
 router.get('/', pagosController.getAll);
